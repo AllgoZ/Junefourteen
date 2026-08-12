@@ -1,4 +1,4 @@
-# ANTARA
+# Junefourteen
 
 Premium women's ethnic-contemporary fashion — frontend prototype built with Next.js
 (App Router), TypeScript, Tailwind CSS, and shadcn/ui.
@@ -45,7 +45,8 @@ Open [http://localhost:3000](http://localhost:3000).
 - **Cart / Wishlist / Recent Searches**: backed by `localStorage` via a small
   external-store helper (`lib/local-store.ts`) read through `useSyncExternalStore`,
   avoiding SSR/hydration mismatches without needing an effect-based hydration step.
-- **Product imagery**: no real photography exists yet. `components/ui/tonal-placeholder.tsx`
-  renders a deterministic grayscale placeholder seeded by each image's `tone` value;
-  `components/product/product-image.tsx` switches to `next/image` automatically once
-  a product has a real `src`.
+- **Product imagery**: `components/ui/tonal-placeholder.tsx` renders a deterministic
+  grayscale placeholder seeded by each image's `tone` value; `components/product/product-image.tsx`
+  and `components/ui/editorial-image.tsx` switch to `next/image` automatically once
+  a `src` is present. Dummy product photography currently lives in `public/images/`
+  and is assigned to products/collections via `lib/mock-data/gallery-images.ts`.
