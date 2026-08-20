@@ -8,6 +8,8 @@ export const ASPECT_CLASSES = {
   wide: "aspect-[4/3]",
   cinematic: "aspect-[16/10]",
   tall: "aspect-[4/5]",
+  /** Slightly more elongated than `portrait` — product-grid cards only (ProductCard), so the shared `portrait` ratio backing PDP gallery/cart/wishlist/search stays unchanged. */
+  gridCard: "aspect-[3/4]",
 } as const;
 
 interface TonalPlaceholderProps {
@@ -40,7 +42,7 @@ export function TonalPlaceholder({
   return (
     <div
       className={cn(
-        "relative flex items-center justify-center overflow-hidden",
+        "relative flex w-full items-center justify-center overflow-hidden",
         ASPECT_CLASSES[aspect],
         className
       )}

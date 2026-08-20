@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ProductImage } from "@/components/product/product-image";
@@ -58,13 +59,23 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
             className="block w-full cursor-zoom-in overflow-hidden"
             aria-label="Open fullscreen image"
           >
-            <ProductImage
-              image={images[activeIndex]}
-              alt={`${productName} — image ${activeIndex + 1}`}
-              aspect="portrait"
-              priority
-              className="transition-transform duration-500 group-hover:scale-110"
-            />
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeIndex}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <ProductImage
+                  image={images[activeIndex]}
+                  alt={`${productName} — image ${activeIndex + 1}`}
+                  aspect="portrait"
+                  priority
+                  className="transition-transform duration-500 group-hover:scale-110"
+                />
+              </motion.div>
+            </AnimatePresence>
           </button>
 
           {images.length > 1 && (
@@ -149,13 +160,24 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
               <X className="size-5" aria-hidden="true" />
             </button>
             <div className="relative flex-1 overflow-hidden">
-              <ProductImage
-                image={images[activeIndex]}
-                alt={`${productName} — image ${activeIndex + 1}`}
-                aspect="portrait"
-                className="h-full"
-                sizes="90vw"
-              />
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeIndex}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="h-full"
+                >
+                  <ProductImage
+                    image={images[activeIndex]}
+                    alt={`${productName} — image ${activeIndex + 1}`}
+                    aspect="portrait"
+                    className="h-full"
+                    sizes="90vw"
+                  />
+                </motion.div>
+              </AnimatePresence>
             </div>
             {images.length > 1 && (
               <>

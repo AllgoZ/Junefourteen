@@ -33,6 +33,14 @@ export const collections: Collection[] = [
     tone: 0.85,
     imageSrc: "/images/model-cream-anarkali-blue-wall.webp",
   },
+  {
+    slug: "black-edit",
+    name: "Black Edit",
+    description:
+      "A dedicated, all-black direction — considered pieces that hold their own without pattern or print.",
+    tone: 0.92,
+    imageSrc: "/images/model-purple-kurta-red-door.webp",
+  },
 ];
 
 export function getCollectionBySlug(slug: string): Collection | undefined {

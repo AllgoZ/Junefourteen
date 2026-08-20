@@ -10,6 +10,9 @@
   --color-foreground-secondary: var(--foreground-secondary);
   --color-subtle-foreground: var(--subtle-foreground);
   --color-offwhite: var(--offwhite);
+  --color-amber: var(--amber);
+  --color-near-black: var(--near-black);
+  --color-warm-white: var(--warm-white);
 
   /*
     Lead with the real system stack so genuine Mac/iOS visitors get actual
@@ -21,6 +24,8 @@
   --font-serif: var(--font-serif);
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --font-heading: var(--font-sans);
+  /* Site header wordmark only — see site-header.tsx. */
+  --font-montserrat: var(--font-montserrat);
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -92,6 +97,14 @@
   --offwhite: #faf9f6; /* warm canvas */
   --foreground: #0a0a0a; /* primary black */
   --foreground-secondary: #171717; /* secondary black — hover/emphasis */
+  /* Restrained accent — used sparingly (small indicator dots, rare hover
+     accents). Never repoints --accent, which already backs shadcn/ui
+     component states (Popover/Accordion/ghost-button hovers, etc.). */
+  --amber: #ffab00;
+  /* Dedicated "Black Edit" section environment — a fashion-campaign near-black,
+     not a dark-mode invert of the rest of the site. Used only there. */
+  --near-black: #050505;
+  --warm-white: #f5f2ee;
 
   --card: #ffffff;
   --card-foreground: #0a0a0a;

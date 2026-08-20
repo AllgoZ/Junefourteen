@@ -6,7 +6,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { NewsletterForm } from "@/components/layout/newsletter-form";
 import { site } from "@/lib/config/site";
 
 /** lucide-react dropped brand/logo glyphs, so social links use a short monogram instead of an icon. */
@@ -19,9 +18,9 @@ const SOCIAL_MONOGRAMS: Record<string, string> = {
 const FOOTER_COLUMNS = [
   { title: "Shop", links: site.footer.shop },
   { title: "Help", links: site.footer.help },
-  { title: "Company", links: site.footer.company },
-  { title: "Legal", links: site.footer.legal },
 ];
+
+const AUX_LINKS = [site.footer.company[0], ...site.footer.legal.slice(0, 2)];
 
 function FooterLinks({ links }: { links: readonly { label: string; href: string }[] }) {
   return (
@@ -40,18 +39,9 @@ function FooterLinks({ links }: { links: readonly { label: string; href: string 
 export function SiteFooter() {
   return (
     <footer className="border-t border-border bg-offwhite">
-      <Container className="py-14 sm:py-20">
-        <div className="mb-12 flex flex-col gap-8 border-b border-border pb-12 sm:mb-16 sm:flex-row sm:items-end sm:justify-between sm:pb-16">
-          <p className="max-w-md text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
-            Made thoughtfully.
-            <br />
-            Worn endlessly.
-          </p>
-          <NewsletterForm className="sm:max-w-xs" />
-        </div>
-
-        {/* Desktop: four-column layout */}
-        <div className="hidden grid-cols-4 gap-x-10 sm:grid">
+      <Container className="py-12 sm:py-16">
+        {/* Desktop: two-column layout */}
+        <div className="hidden grid-cols-2 gap-x-16 sm:grid sm:w-fit">
           {FOOTER_COLUMNS.map((col) => (
             <div key={col.title}>
               <p className="mb-4 text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase">
@@ -76,10 +66,17 @@ export function SiteFooter() {
           ))}
         </Accordion>
 
-        <div className="mt-12 flex flex-col-reverse items-center gap-4 border-t border-border pt-6 sm:mt-16 sm:flex-row sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} {site.name}. All rights reserved.
-          </p>
+        <div className="mt-10 flex flex-col-reverse items-center gap-4 border-t border-border pt-6 sm:mt-12 sm:flex-row sm:justify-between">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground sm:justify-start">
+            <span>
+              © {new Date().getFullYear()} {site.name}
+            </span>
+            {AUX_LINKS.map((link) => (
+              <Link key={link.label} href={link.href} className="transition-colors hover:text-foreground">
+                {link.label}
+              </Link>
+            ))}
+          </div>
           <div className="flex items-center gap-4">
             {site.social.map((s) => (
               <a

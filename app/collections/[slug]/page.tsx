@@ -69,11 +69,6 @@ export default async function CollectionPage({
         ]}
       />
 
-      <div className="mt-4 mb-2">
-        <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">{collection.name}</h1>
-        <p className="mt-2 max-w-xl text-sm text-muted-foreground">{collection.description}</p>
-      </div>
-
       <ShopToolbar
         productCount={products.length}
         categories={categories}

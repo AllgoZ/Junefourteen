@@ -7,9 +7,11 @@ interface ProductGridProps {
   products: Product[];
   className?: string;
   emptyMessage?: string;
+  /** For placement on the near-black Black Edit section. */
+  dark?: boolean;
 }
 
-export function ProductGrid({ products, className, emptyMessage }: ProductGridProps) {
+export function ProductGrid({ products, className, emptyMessage, dark = false }: ProductGridProps) {
   if (products.length === 0) {
     return (
       <EmptyState
@@ -24,12 +26,12 @@ export function ProductGrid({ products, className, emptyMessage }: ProductGridPr
   return (
     <div
       className={cn(
-        "grid grid-cols-2 gap-x-3 gap-y-10 sm:gap-x-6 md:grid-cols-3 xl:grid-cols-4 xl:gap-x-8",
+        "grid grid-cols-2 gap-x-2 gap-y-8 sm:gap-x-4 sm:gap-y-10 lg:grid-cols-3 lg:gap-x-6 lg:gap-y-12 xl:grid-cols-4",
         className
       )}
     >
       {products.map((product, i) => (
-        <ProductCard key={product.id} product={product} priority={i < 4} />
+        <ProductCard key={product.id} product={product} priority={i < 4} dark={dark} />
       ))}
     </div>
   );

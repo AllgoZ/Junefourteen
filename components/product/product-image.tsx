@@ -22,12 +22,12 @@ export function ProductImage({
   alt,
   aspect = "portrait",
   className,
-  sizes = "(min-width: 1024px) 25vw, 50vw",
+  sizes = "(min-width: 1440px) 620px, 50vw",
   priority = false,
 }: ProductImageProps) {
   if (image?.src) {
     return (
-      <div className={cn("relative overflow-hidden bg-muted", ASPECT_CLASSES[aspect], className)}>
+      <div className={cn("relative w-full overflow-hidden bg-muted", ASPECT_CLASSES[aspect], className)}>
         <Image
           src={image.src}
           alt={alt}

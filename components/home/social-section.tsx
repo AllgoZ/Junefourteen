@@ -3,7 +3,7 @@ import { Container } from "@/components/layout/container";
 import { GALLERY_IMAGES } from "@/lib/mock-data/gallery-images";
 import { site } from "@/lib/config/site";
 
-const TILE_TONES = [0.12, 0.3, 0.48, 0.62, 0.78, 0.9];
+const TILE_TONES = [0.15, 0.38, 0.6, 0.82];
 
 export function SocialSection() {
   const instagram = site.social.find((s) => s.label === "Instagram")?.href ?? site.social[0].href;
@@ -16,7 +16,7 @@ export function SocialSection() {
           @{site.name.toLowerCase()} on Instagram
         </p>
       </Container>
-      <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {TILE_TONES.map((tone, i) => (
           <a
             key={i}
@@ -31,7 +31,7 @@ export function SocialSection() {
               aspect="square"
               alt={`${site.name} on Instagram`}
               decorative
-              sizes="(min-width: 640px) 16vw, 33vw"
+              sizes="(min-width: 640px) 25vw, 50vw"
             />
           </a>
         ))}

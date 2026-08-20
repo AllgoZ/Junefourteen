@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Heart, Menu, Search, ShoppingBag, User } from "lucide-react";
 import { site } from "@/lib/config/site";
 import { cn } from "@/lib/utils";
@@ -27,22 +28,34 @@ export function SiteHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
   const { itemCount, openCart } = useCart();
   const { count: wishlistCount } = useWishlist();
+  const pathname = usePathname();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 4);
+    // On the homepage the header should stay transparent for the height of
+    // the hero (75dvh), not just the first few px of scroll — everywhere
+    // else keeps the original small threshold.
+    const onScroll = () => {
+      const threshold = pathname === "/" ? window.innerHeight * 0.7 : 4;
+      setScrolled(window.scrollY > threshold);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [pathname]);
+
+  /** Transparent, white-on-photo nav over the homepage hero — every other route/scroll state is untouched. */
+  const overHero = pathname === "/" && !scrolled;
 
   return (
     <>
       <header
         className={cn(
           "sticky top-0 z-40 border-b transition-colors duration-300",
-          scrolled
-            ? "border-border bg-background/90 backdrop-blur-md"
-            : "border-transparent bg-background/70 backdrop-blur-sm"
+          overHero
+            ? "border-transparent bg-transparent"
+            : scrolled
+              ? "border-border bg-background/90 backdrop-blur-md"
+              : "border-transparent bg-background/70 backdrop-blur-sm"
         )}
       >
         <Container className="grid h-14 grid-cols-3 items-center sm:h-[72px]">
@@ -51,7 +64,10 @@ export function SiteHeader() {
               type="button"
               onClick={() => setMenuOpen(true)}
               aria-label="Open menu"
-              className="flex size-10 items-center justify-center -ml-2 md:hidden"
+              className={cn(
+                "flex size-10 items-center justify-center -ml-2 md:hidden",
+                overHero && "text-white"
+              )}
             >
               <Menu className="size-5" aria-hidden="true" />
             </button>
@@ -60,7 +76,10 @@ export function SiteHeader() {
                 <Link
                   key={link.label}
                   href={link.href}
-                  className="text-sm text-foreground transition-opacity hover:opacity-60"
+                  className={cn(
+                    "text-sm transition-opacity hover:opacity-60",
+                    overHero ? "text-white" : "text-foreground"
+                  )}
                 >
                   {link.label}
                 </Link>
@@ -70,12 +89,20 @@ export function SiteHeader() {
 
           <Link
             href="/"
-            className="justify-self-center font-serif text-lg tracking-[0.08em] text-foreground sm:text-xl"
+            className={cn(
+              "justify-self-center truncate font-montserrat text-sm font-semibold tracking-[0.02em] whitespace-nowrap sm:text-lg sm:tracking-[0.06em] lg:text-xl",
+              overHero ? "text-white" : "text-foreground"
+            )}
           >
             {site.name}
           </Link>
 
-          <div className="flex items-center gap-1 justify-self-end sm:gap-2">
+          <div
+            className={cn(
+              "flex items-center gap-1 justify-self-end sm:gap-2",
+              overHero && "text-white"
+            )}
+          >
             <button
               type="button"
               onClick={() => setSearchOpen(true)}

@@ -6,7 +6,7 @@ import { ProductGallery } from "@/components/product/product-gallery";
 import { AddToBagPanel } from "@/components/product/add-to-bag-panel";
 import { ProductInfoAccordion } from "@/components/product/product-info-accordion";
 import { HomeSection } from "@/components/home/home-section";
-import { ProductRail } from "@/components/product/product-rail";
+import { ProductGrid } from "@/components/product/product-grid";
 import {
   getProductBySlug,
   getProducts,
@@ -39,7 +39,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const related = await getRelatedProducts(product);
+  const related = await getRelatedProducts(product, 4);
 
   return (
     <div>
@@ -66,7 +66,9 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
 
       {related.length > 0 && (
         <HomeSection title="You May Also Like">
-          <ProductRail products={related} />
+          <Container>
+            <ProductGrid products={related} />
+          </Container>
         </HomeSection>
       )}
     </div>

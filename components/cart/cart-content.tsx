@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CartLineItem } from "@/components/cart/cart-line-item";
@@ -50,9 +51,11 @@ export function CartContent({
           variant === "drawer" ? "flex-1 overflow-y-auto px-4 sm:px-6" : "border-b border-border"
         )}
       >
-        {items.map((item) => (
-          <CartLineItem key={item.lineId} item={item} />
-        ))}
+        <AnimatePresence initial={false}>
+          {items.map((item) => (
+            <CartLineItem key={item.lineId} item={item} />
+          ))}
+        </AnimatePresence>
       </div>
 
       <div

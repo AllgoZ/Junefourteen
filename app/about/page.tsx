@@ -49,15 +49,17 @@ export default function AboutPage() {
         />
       </div>
 
-      <EditorialSplit
-        eyebrow="Our Philosophy"
-        title="Made for the way you move."
-        body="We design around the body in motion, not the mannequin at rest. Every cut is tested for how it feels to sit, walk, and reach — not just how it photographs."
-        imageSrc="/images/model-mustard-kurta-kalamkari-dupatta.webp"
-        imageTone={0.62}
-        imageAlt={`${site.name} design process`}
-        imageSide="right"
-      />
+      <div id="philosophy">
+        <EditorialSplit
+          eyebrow="Our Philosophy"
+          title="Made for the way you move."
+          body="We design around the body in motion, not the mannequin at rest. Every cut is tested for how it feels to sit, walk, and reach — not just how it photographs."
+          imageSrc="/images/model-mustard-kurta-kalamkari-dupatta.webp"
+          imageTone={0.62}
+          imageAlt={`${site.name} design process`}
+          imageSide="right"
+        />
+      </div>
 
       <Container id="journal" size="narrow" className="py-14 text-center">
         <p className="text-xs font-medium tracking-[0.2em] text-muted-foreground uppercase">

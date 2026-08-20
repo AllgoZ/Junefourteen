@@ -35,7 +35,7 @@ export function EditorialImage({
   if (src) {
     return (
       <div
-        className={cn("relative overflow-hidden bg-muted", ASPECT_CLASSES[aspect], className)}
+        className={cn("relative w-full overflow-hidden bg-muted", ASPECT_CLASSES[aspect], className)}
         {...(decorative ? { "aria-hidden": true } : {})}
       >
         <Image

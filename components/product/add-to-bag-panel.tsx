@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AnimatePresence, motion } from "motion/react";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Price } from "@/components/product/price";
@@ -205,16 +206,24 @@ export function AddToBagPanel({ product }: { product: Product }) {
         )}
       </div>
 
-      {!product.isSoldOut && showStickyBar && (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:hidden">
-          <span className="text-sm font-medium text-foreground tabular-nums">
-            {formatPrice(product.price)}
-          </span>
-          <Button onClick={handleAddToBag} className={cn("max-w-[240px] flex-1", STICKY_CTA)}>
-            Add to Bag
-          </Button>
-        </div>
-      )}
+      <AnimatePresence>
+        {!product.isSoldOut && showStickyBar && (
+          <motion.div
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:hidden"
+          >
+            <span className="text-sm font-medium text-foreground tabular-nums">
+              {formatPrice(product.price)}
+            </span>
+            <Button onClick={handleAddToBag} className={cn("max-w-[240px] flex-1", STICKY_CTA)}>
+              Add to Bag
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

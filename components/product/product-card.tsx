@@ -9,9 +9,11 @@ interface ProductCardProps {
   product: Product;
   priority?: boolean;
   className?: string;
+  /** For placement on the near-black Black Edit section. */
+  dark?: boolean;
 }
 
-export function ProductCard({ product, priority, className }: ProductCardProps) {
+export function ProductCard({ product, priority, className, dark = false }: ProductCardProps) {
   const [primary, secondary] = product.images;
 
   return (
@@ -24,32 +26,34 @@ export function ProductCard({ product, priority, className }: ProductCardProps) 
           image={primary}
           alt={product.name}
           priority={priority}
+          aspect="gridCard"
           className={cn(
-            "transition-opacity duration-500",
-            secondary && "md:group-hover:opacity-0",
-            product.isSoldOut && "grayscale opacity-70"
+            "transition-all duration-500 ease-out group-hover:scale-[1.03]",
+            secondary && "md:group-hover:opacity-0"
           )}
         />
         {secondary && (
           <ProductImage
             image={secondary}
             alt=""
-            className={cn(
-              "absolute inset-0 hidden opacity-0 transition-opacity duration-500 md:block md:group-hover:opacity-100",
-              product.isSoldOut && "grayscale opacity-70"
-            )}
+            aspect="gridCard"
+            className="absolute inset-0 hidden opacity-0 transition-all duration-500 ease-out group-hover:scale-[1.03] md:block md:group-hover:opacity-100"
           />
         )}
 
+        {(product.isNew || product.compareAtPrice) && !product.isSoldOut && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/30 to-transparent" />
+        )}
+
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
-          {product.isNew ? (
-            <span className="rounded-sm bg-foreground px-2 py-1 text-[10px] font-medium tracking-[0.12em] text-background uppercase">
-              New
+          {product.isSoldOut ? (
+            <span className="rounded-full bg-gradient-to-b from-white/95 to-white/70 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-destructive uppercase shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-sm">
+              Sold Out
             </span>
+          ) : product.isNew ? (
+            <span className="text-[10px] font-medium tracking-[0.14em] text-white uppercase">New</span>
           ) : product.compareAtPrice ? (
-            <span className="rounded-sm bg-background px-2 py-1 text-[10px] font-medium tracking-[0.12em] text-foreground uppercase">
-              Sale
-            </span>
+            <span className="text-[10px] font-medium tracking-[0.14em] text-white uppercase">Sale</span>
           ) : (
             <span />
           )}
@@ -67,17 +71,18 @@ export function ProductCard({ product, priority, className }: ProductCardProps) 
             />
           </span>
         </div>
-
-        {product.isSoldOut && (
-          <span className="pointer-events-none absolute bottom-2.5 left-2.5 rounded-sm bg-background/90 px-2 py-1 text-[10px] font-medium tracking-[0.14em] text-foreground uppercase">
-            Sold Out
-          </span>
-        )}
       </Link>
 
-      <Link href={`/product/${product.slug}`} className="mt-3 flex flex-col gap-1">
-        <h3 className="text-sm text-foreground">{product.name}</h3>
-        <Price price={product.price} compareAtPrice={product.compareAtPrice} />
+      <Link href={`/product/${product.slug}`} className="mt-2.5 flex flex-col gap-1">
+        <h3 className={cn("text-xs", dark ? "text-warm-white/80" : "text-muted-foreground")}>
+          {product.name}
+        </h3>
+        <Price
+          price={product.price}
+          compareAtPrice={product.compareAtPrice}
+          dark={dark}
+          showCompareAtPrice={false}
+        />
       </Link>
     </div>
   );

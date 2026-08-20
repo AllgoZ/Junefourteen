@@ -17,7 +17,20 @@ export const site = {
     primary: [
       { label: "Shop", href: "/shop" },
       { label: "Collections", href: "/shop" },
-      { label: "New Arrivals", href: "/shop?sort=newest" },
+      { label: "New", href: "/shop?sort=newest" },
+    ],
+    shop: [
+      { label: "All", href: "/shop" },
+      { label: "Kurtas", href: "/shop?category=Kurta+Sets" },
+      { label: "Sets", href: "/shop?category=Co-ord+Sets" },
+      { label: "Anarkali", href: "/shop?category=Anarkali" },
+      { label: "Dresses", href: "/shop?category=Dresses" },
+      { label: "Sarees", href: "/shop?category=Saree+Sets" },
+      { label: "Black Edit", href: "/shop?collection=black-edit" },
+    ],
+    about: [
+      { label: "Our Story", href: "/about#story" },
+      { label: "Our Philosophy", href: "/about#philosophy" },
     ],
   },
   footer: {

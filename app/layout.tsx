@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Fraunces } from "next/font/google";
+import { Montserrat } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { CartProvider } from "@/components/providers/cart-provider";
 import { WishlistProvider } from "@/components/providers/wishlist-provider";
@@ -20,6 +21,13 @@ const serif = Fraunces({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   style: ["normal", "italic"],
+  display: "swap",
+});
+
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+  weight: ["600"],
   display: "swap",
 });
 
@@ -50,8 +58,11 @@ export const viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${serif.variable} h-full`}>
-      <body className="flex min-h-full flex-col font-sans antialiased">
+    <html lang="en" className={`${sans.variable} ${serif.variable} ${montserrat.variable} h-full`}>
+      <body
+        className="flex min-h-full flex-col font-sans antialiased"
+        suppressHydrationWarning
+      >
         <CartProvider>
           <WishlistProvider>
             <a

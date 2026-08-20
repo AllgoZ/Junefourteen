@@ -45,14 +45,6 @@ export default async function ShopPage({ searchParams }: PageProps<"/shop">) {
     <Container className="py-6">
       <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Shop" }]} />
 
-      <div className="mt-4 mb-2">
-        <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">Shop All</h1>
-        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-          The full {site.name} edit — handloom textiles, considered silhouettes, and pieces built
-          to outlast the season.
-        </p>
-      </div>
-
       <ShopToolbar
         productCount={products.length}
         categories={categories}

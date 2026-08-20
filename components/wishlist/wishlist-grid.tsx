@@ -53,7 +53,7 @@ export function WishlistGrid({ products }: { products: Product[] }) {
   };
 
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-10 sm:gap-x-6 md:grid-cols-3 xl:grid-cols-4 xl:gap-x-8">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-10 sm:gap-x-6 lg:grid-cols-3 lg:gap-x-8 lg:gap-y-12 xl:grid-cols-4">
       {items.map((item) => {
         const product = products.find((p) => p.id === item.productId);
         return (
