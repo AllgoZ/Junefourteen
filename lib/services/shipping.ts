@@ -1,25 +1,11 @@
 import type { ShippingEstimateInput, ShippingEstimateResult } from "@/types/shipping";
-
-/**
- * Mock shipping rules, isolated from UI so this can be swapped for a real
- * shipping API later without touching the cart/checkout components.
- */
-const REMOTE_STATES = new Set([
-  "Andaman and Nicobar Islands",
-  "Lakshadweep",
-  "Arunachal Pradesh",
-  "Nagaland",
-  "Manipur",
-  "Mizoram",
-]);
-
-const RATE_BY_STATE: Record<string, number> = {
-  "Tamil Nadu": 100,
-};
-
-const DEFAULT_INDIA_RATE = 120;
-const REMOTE_RATE = 150;
-const INTERNATIONAL_RATE = 1500;
+import {
+  DEFAULT_INDIA_RATE,
+  INTERNATIONAL_RATE,
+  RATE_BY_STATE,
+  REMOTE_RATE,
+  REMOTE_STATES,
+} from "@/lib/shipping/rate-table";
 
 export async function getShippingEstimate(
   input: ShippingEstimateInput

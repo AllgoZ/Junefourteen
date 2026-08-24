@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { MapPin, Package, User as UserIcon, Heart } from "lucide-react";
 import {
   Accordion,
@@ -8,9 +7,15 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Container } from "@/components/layout/container";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { WishlistSummary } from "@/components/account/wishlist-summary";
+import { AccountAuthForms } from "@/components/account/auth-forms";
+import { OrdersPanel } from "@/components/account/orders-panel";
+import { AddressesPanel } from "@/components/account/addresses-panel";
+import { ProfilePanel } from "@/components/account/profile-panel";
+import { verifySession, getCurrentProfile } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
+import { listOrdersForUser } from "@/lib/repositories/orders";
+import { listAddressesForUser } from "@/lib/repositories/addresses";
 
 export const metadata: Metadata = {
   title: "Account",
@@ -23,7 +28,28 @@ const ROWS = [
   { value: "profile", icon: UserIcon, label: "Profile" },
 ] as const;
 
-export default function AccountPage() {
+export default async function AccountPage() {
+  const user = await verifySession();
+
+  if (!user) {
+    return (
+      <Container size="narrow" className="py-8 sm:py-12">
+        <h1 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">Account</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Sign in to view your orders, wishlist, and saved addresses.
+        </p>
+        <AccountAuthForms />
+      </Container>
+    );
+  }
+
+  const supabase = await createClient();
+  const [profile, orders, addresses] = await Promise.all([
+    getCurrentProfile(),
+    listOrdersForUser(supabase, user.id),
+    listAddressesForUser(supabase, user.id),
+  ]);
+
   return (
     <Container size="narrow" className="py-8 sm:py-12">
       <h1 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">Account</h1>
@@ -39,32 +65,11 @@ export default function AccountPage() {
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-2">
-              {value === "orders" && (
-                <EmptyState
-                  title="No orders yet"
-                  description="Order history and tracking are coming soon. Once you place an order, it will show up here."
-                  action={
-                    <Button asChild variant="outline" size="sm">
-                      <Link href="/shop">Start Shopping</Link>
-                    </Button>
-                  }
-                  className="items-start px-0 py-4 text-left"
-                />
-              )}
+              {value === "orders" && <OrdersPanel orders={orders} />}
               {value === "wishlist" && <WishlistSummary />}
-              {value === "addresses" && (
-                <EmptyState
-                  title="No saved addresses"
-                  description="Saved addresses will let you check out faster. This is coming soon."
-                  className="items-start px-0 py-4 text-left"
-                />
-              )}
+              {value === "addresses" && <AddressesPanel addresses={addresses} />}
               {value === "profile" && (
-                <EmptyState
-                  title="Profile coming soon"
-                  description="Account sign-in and profile management are part of our upcoming release."
-                  className="items-start px-0 py-4 text-left"
-                />
+                <ProfilePanel email={user.email ?? ""} fullName={profile?.full_name ?? null} />
               )}
             </AccordionContent>
           </AccordionItem>

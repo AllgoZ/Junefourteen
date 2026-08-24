@@ -2,11 +2,14 @@ import { EditorialImage } from "@/components/ui/editorial-image";
 import { Container } from "@/components/layout/container";
 import { GALLERY_IMAGES } from "@/lib/mock-data/gallery-images";
 import { site } from "@/lib/config/site";
+import { getSocialLinks } from "@/lib/services/social-links";
 
 const TILE_TONES = [0.15, 0.38, 0.6, 0.82];
 
-export function SocialSection() {
-  const instagram = site.social.find((s) => s.label === "Instagram")?.href ?? site.social[0].href;
+export async function SocialSection() {
+  const dbSocialLinks = await getSocialLinks();
+  const socialLinks = dbSocialLinks.length > 0 ? dbSocialLinks : site.social;
+  const instagram = socialLinks.find((s) => s.label === "Instagram")?.href ?? socialLinks[0].href;
 
   return (
     <section className="py-14 sm:py-20">

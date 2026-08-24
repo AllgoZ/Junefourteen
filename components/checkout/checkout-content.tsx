@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useCart } from "@/components/providers/cart-provider";
 import { getShippingEstimate, INDIAN_STATES } from "@/lib/services/shipping";
+import { createOrderAction } from "@/app/(site)/checkout/actions";
 import { formatPrice } from "@/lib/format";
 import type { ShippingEstimateResult } from "@/types/shipping";
 
@@ -66,10 +67,12 @@ function Section({
 }
 
 export function CheckoutContent() {
-  const { items, subtotal } = useCart();
+  const { items, subtotal, clearCart } = useCart();
   const [form, setForm] = useState<AddressForm>(EMPTY_FORM);
   const [delivery, setDelivery] = useState<ShippingEstimateResult | null>(null);
   const [estimating, setEstimating] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
   const update = (field: keyof AddressForm, value: string) => {
     setForm((f) => ({ ...f, [field]: value }));
@@ -87,6 +90,44 @@ export function CheckoutContent() {
   };
 
   const total = subtotal + (delivery?.amount ?? 0);
+
+  const placeOrder = async () => {
+    setPlacing(true);
+    const result = await createOrderAction(
+      items.map(({ productId, size, sleeve, customMeasurements, quantity }) => ({
+        productId,
+        size,
+        sleeve,
+        customMeasurements,
+        quantity,
+      })),
+      { ...form }
+    );
+    setPlacing(false);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    clearCart();
+    setOrderNumber(result.orderNumber ?? null);
+  };
+
+  if (orderNumber) {
+    return (
+      <EmptyState
+        title="Order placed."
+        description={`Order ${orderNumber} is confirmed. Payment is currently a placeholder — we'll be in touch about next steps.`}
+        action={
+          <Button asChild>
+            <Link href="/shop">Continue Shopping</Link>
+          </Button>
+        }
+        className="min-h-[50vh]"
+      />
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -275,14 +316,8 @@ export function CheckoutContent() {
           </div>
         </div>
 
-        <Button
-          size="lg"
-          className="mt-6 w-full"
-          onClick={() =>
-            toast.info("This is a prototype — payment integration is coming soon.")
-          }
-        >
-          Place Order
+        <Button size="lg" className="mt-6 w-full" disabled={placing} onClick={placeOrder}>
+          {placing ? "Placing Order…" : "Place Order"}
         </Button>
       </div>
     </div>

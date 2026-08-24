@@ -12,9 +12,11 @@ import {
   getNewArrivals,
   getProducts,
 } from "@/lib/services/products";
+import { getBanners } from "@/lib/services/banners";
 
 export default async function HomePage() {
-  const [collections, newArrivals, bestSellers, blackEdit] = await Promise.all([
+  const [banners, collections, newArrivals, bestSellers, blackEdit] = await Promise.all([
+    getBanners(),
     getCollections(),
     getNewArrivals(6),
     getBestSellers(6),
@@ -23,7 +25,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HeroSection />
+      <HeroSection banners={banners} />
 
       <HomeSection title="Collections" compact>
         <FeaturedCollections collections={collections} />

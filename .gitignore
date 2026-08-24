@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# contains live Supabase/Cloudinary credentials pasted in plaintext — never commit
+/prompt files/backend.md
 
 # vercel
 .vercel

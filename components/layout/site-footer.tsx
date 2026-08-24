@@ -7,6 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { site } from "@/lib/config/site";
+import { getSocialLinks } from "@/lib/services/social-links";
 
 /** lucide-react dropped brand/logo glyphs, so social links use a short monogram instead of an icon. */
 const SOCIAL_MONOGRAMS: Record<string, string> = {
@@ -36,7 +37,12 @@ function FooterLinks({ links }: { links: readonly { label: string; href: string 
   );
 }
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const dbSocialLinks = await getSocialLinks();
+  // Fall back to the hardcoded defaults until the admin has added any —
+  // matches the same "never render empty" pattern as the hero banners.
+  const socialLinks = dbSocialLinks.length > 0 ? dbSocialLinks : site.social;
+
   return (
     <footer className="border-t border-border bg-offwhite">
       <Container className="py-12 sm:py-16">
@@ -78,7 +84,7 @@ export function SiteFooter() {
             ))}
           </div>
           <div className="flex items-center gap-4">
-            {site.social.map((s) => (
+            {socialLinks.map((s) => (
               <a
                 key={s.label}
                 href={s.href}

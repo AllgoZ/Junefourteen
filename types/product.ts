@@ -62,3 +62,28 @@ export interface Collection {
   tone: number;
   imageSrc?: string;
 }
+
+export interface Banner {
+  id: string;
+  alt: string;
+  /** Horizontal/laptop image. */
+  src?: string;
+  objectPosition: string;
+  /** Vertical/mobile image — falls back to `src` (with `mobileObjectPosition`) when absent. */
+  mobileSrc?: string;
+  mobileAlt: string;
+  mobileObjectPosition: string;
+  tone: number;
+  /**
+   * Optional overlay copy — all opt-in. hero-section.tsx only renders the
+   * text block when `headline` is non-empty, so a banner with none of this
+   * filled in keeps today's exact text-free look.
+   */
+  badgeText?: string;
+  headline?: string;
+  subheading?: string;
+  offerBadgeText?: string;
+  /** Primary CTA. */
+  link?: { label: string; href: string };
+  secondaryLink?: { label: string; href: string };
+}

@@ -1,10 +1,22 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { WishlistItem } from "@/types/cart";
 import { createLocalStore } from "@/lib/local-store";
+import { createClient } from "@/lib/supabase/client";
+import { getIsAuthed, setIsAuthed, subscribeIsAuthed } from "@/lib/auth/client-auth-store";
+import {
+  addWishlistItemAction,
+  getWishlistForCurrentUser,
+  removeWishlistItemAction,
+} from "@/lib/services/wishlist";
 
 const wishlistStore = createLocalStore<WishlistItem[]>("antara:wishlist", []);
+
+/** For sign-in/out flows — see setCartItemsLocally's twin in cart-provider.tsx. */
+export function setWishlistItemsLocally(items: WishlistItem[]): void {
+  wishlistStore.set(items);
+}
 
 interface WishlistContextValue {
   items: WishlistItem[];
@@ -23,16 +35,47 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     wishlistStore.getSnapshot,
     wishlistStore.getServerSnapshot
   );
+  const isAuthed = useSyncExternalStore(subscribeIsAuthed, getIsAuthed, () => false);
 
-  const addItem = useCallback((item: WishlistItem) => {
-    wishlistStore.set((prev) =>
-      prev.some((i) => i.productId === item.productId) ? prev : [item, ...prev]
-    );
+  useEffect(() => {
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION" && session) {
+        setIsAuthed(true);
+        getWishlistForCurrentUser().then(setWishlistItemsLocally);
+      } else if (event === "SIGNED_OUT") {
+        setIsAuthed(false);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  const removeItem = useCallback((productId: string) => {
-    wishlistStore.set((prev) => prev.filter((i) => i.productId !== productId));
+  const syncFromServer = useCallback(() => {
+    if (!getIsAuthed()) return;
+    getWishlistForCurrentUser().then(setWishlistItemsLocally);
   }, []);
+
+  const addItem = useCallback(
+    (item: WishlistItem) => {
+      wishlistStore.set((prev) => (prev.some((i) => i.productId === item.productId) ? prev : [item, ...prev]));
+      if (isAuthed) {
+        addWishlistItemAction(item.productId).then(syncFromServer);
+      }
+    },
+    [isAuthed, syncFromServer]
+  );
+
+  const removeItem = useCallback(
+    (productId: string) => {
+      wishlistStore.set((prev) => prev.filter((i) => i.productId !== productId));
+      if (isAuthed) {
+        removeWishlistItemAction(productId).then(syncFromServer);
+      }
+    },
+    [isAuthed, syncFromServer]
+  );
 
   const isWishlisted = useCallback(
     (productId: string) => items.some((i) => i.productId === productId),

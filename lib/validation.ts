@@ -70,3 +70,78 @@ export function validateAddToBagSelection(input: SelectionInput): SelectionError
 export function hasSelectionErrors(errors: SelectionErrors): boolean {
   return Boolean(errors.size || errors.sleeve || errors.measurements);
 }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export interface SignUpInput {
+  fullName: string;
+  email: string;
+  password: string;
+}
+
+export interface SignUpErrors {
+  fullName?: string;
+  email?: string;
+  password?: string;
+}
+
+export function validateSignUp(input: SignUpInput): SignUpErrors {
+  const errors: SignUpErrors = {};
+  if (input.fullName.trim().length < 2) errors.fullName = "Enter your full name";
+  if (!EMAIL_PATTERN.test(input.email)) errors.email = "Enter a valid email address";
+  if (input.password.length < 8) errors.password = "Use at least 8 characters";
+  return errors;
+}
+
+export interface SignInInput {
+  email: string;
+  password: string;
+}
+
+export interface SignInErrors {
+  email?: string;
+  password?: string;
+}
+
+export function validateSignIn(input: SignInInput): SignInErrors {
+  const errors: SignInErrors = {};
+  if (!EMAIL_PATTERN.test(input.email)) errors.email = "Enter a valid email address";
+  if (!input.password) errors.password = "Enter your password";
+  return errors;
+}
+
+export function hasAuthErrors(errors: SignUpErrors | SignInErrors): boolean {
+  return Object.keys(errors).length > 0;
+}
+
+export function isValidEmail(email: string): boolean {
+  return EMAIL_PATTERN.test(email);
+}
+
+export function isValidPassword(password: string): boolean {
+  return password.length >= 8;
+}
+
+/**
+ * Quick mobile-number signup (add-to-bag/buy-now popup) — deliberately no
+ * OTP/verification for v1, see components/account/mobile-signup-dialog.tsx.
+ * Accepts a bare 10-digit Indian number or one already carrying a country
+ * code; normalizePhone below turns either into the E.164 shape Supabase
+ * phone auth expects.
+ */
+const BARE_10_DIGIT = /^\d{10}$/;
+const E164_LOOSE = /^\+\d{11,15}$/;
+
+export function validateMobile(mobile: string): string | undefined {
+  const digitsOnly = mobile.replace(/[\s-]/g, "");
+  if (!BARE_10_DIGIT.test(digitsOnly) && !E164_LOOSE.test(digitsOnly)) {
+    return "Enter a valid mobile number";
+  }
+  return undefined;
+}
+
+/** Normalizes to E.164; bare 10-digit numbers are assumed India (+91), matching site.contactPhone. */
+export function normalizePhone(mobile: string): string {
+  const digitsOnly = mobile.replace(/[\s-]/g, "");
+  return digitsOnly.startsWith("+") ? digitsOnly : `+91${digitsOnly}`;
+}

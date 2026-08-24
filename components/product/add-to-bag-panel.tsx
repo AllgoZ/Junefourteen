@@ -14,6 +14,8 @@ import { useCart } from "@/components/providers/cart-provider";
 import { validateAddToBagSelection, hasSelectionErrors, type SelectionErrors } from "@/lib/validation";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { getIsAuthed } from "@/lib/auth/client-auth-store";
+import { MobileSignupDialog } from "@/components/account/mobile-signup-dialog";
 import type { CustomMeasurements, Product, Size, SleeveOption } from "@/types/product";
 
 /**
@@ -43,6 +45,21 @@ export function AddToBagPanel({ product }: { product: Product }) {
 
   const inlineButtonRef = useRef<HTMLDivElement>(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
+
+  // Add-to-bag/buy-now account-creation popup (mobile number only, see
+  // mobile-signup-dialog.tsx) — guests only, and purely additive: the
+  // underlying add/checkout action below always happens regardless of
+  // whether this dialog is submitted or skipped.
+  const [mobileSignupOpen, setMobileSignupOpen] = useState(false);
+  const pendingCheckoutRef = useRef(false);
+
+  function handleMobileSignupOpenChange(open: boolean) {
+    setMobileSignupOpen(open);
+    if (!open && pendingCheckoutRef.current) {
+      pendingCheckoutRef.current = false;
+      router.push("/checkout");
+    }
+  }
 
   useEffect(() => {
     const el = inlineButtonRef.current;
@@ -94,12 +111,18 @@ export function AddToBagPanel({ product }: { product: Product }) {
     toast.success(`${product.name} added to your bag.`, {
       action: { label: "View Bag", onClick: openCart },
     });
+    if (!getIsAuthed()) setMobileSignupOpen(true);
   }
 
   function handleBuyNow() {
     if (product.isSoldOut || !validate()) return;
     addItem(buildLine(), quantity);
-    router.push("/checkout");
+    if (getIsAuthed()) {
+      router.push("/checkout");
+    } else {
+      pendingCheckoutRef.current = true;
+      setMobileSignupOpen(true);
+    }
   }
 
   return (
@@ -224,6 +247,8 @@ export function AddToBagPanel({ product }: { product: Product }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <MobileSignupDialog open={mobileSignupOpen} onOpenChange={handleMobileSignupOpenChange} />
     </div>
   );
 }

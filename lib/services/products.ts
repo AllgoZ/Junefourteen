@@ -1,5 +1,8 @@
-import { products } from "@/lib/mock-data/products";
-import { collections } from "@/lib/mock-data/collections";
+import { unstable_cache } from "next/cache";
+import { listActiveProducts, getActiveProductBySlug } from "@/lib/repositories/products";
+import { listActiveCollections, getActiveCollectionBySlug } from "@/lib/repositories/collections";
+import { dbProductToProduct } from "@/lib/mappers/product";
+import { dbCollectionToCollection } from "@/lib/mappers/collection";
 import type { Collection, Product, Size, SleeveOption } from "@/types/product";
 
 export type SortOption =
@@ -22,13 +25,28 @@ export interface ProductFilters {
 }
 
 /**
- * Every export here is async even though the mock data is synchronous — this
- * is the seam that gets swapped for real Supabase calls later without any UI
- * changes.
+ * Cached base fetchers — the Supabase seam every function below reads
+ * through. Tagged broadly ("products"/"collections") rather than per-row:
+ * the catalog is small (18 products, 5 collections) so over-invalidating on
+ * any single admin edit costs nothing, and it keeps revalidation simple to
+ * reason about. getProductBySlug/getCollectionBySlug additionally tag their
+ * own entry (`product:<slug>`/`collection:<slug>`) for a narrower
+ * revalidateTag when only that one row changed.
  */
+const getCachedProducts = unstable_cache(
+  async () => (await listActiveProducts()).map(dbProductToProduct),
+  ["products"],
+  { tags: ["products"], revalidate: 3600 }
+);
+
+const getCachedCollections = unstable_cache(
+  async () => (await listActiveCollections()).map(dbCollectionToCollection),
+  ["collections"],
+  { tags: ["collections"], revalidate: 3600 }
+);
 
 export async function getProducts(filters: ProductFilters = {}): Promise<Product[]> {
-  let result = [...products];
+  let result = await getCachedProducts();
 
   if (filters.collectionSlugs?.length) {
     result = result.filter((p) =>
@@ -87,10 +105,20 @@ export async function getProducts(filters: ProductFilters = {}): Promise<Product
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
-  return products.find((p) => p.slug === slug);
+  const cached = unstable_cache(
+    async (s: string) => {
+      const row = await getActiveProductBySlug(s);
+      return row ? dbProductToProduct(row) : null;
+    },
+    ["product-by-slug"],
+    { tags: ["products", `product:${slug}`], revalidate: 3600 }
+  );
+  const product = await cached(slug);
+  return product ?? undefined;
 }
 
 export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
+  const products = await getCachedProducts();
   return products
     .filter(
       (p) =>
@@ -102,26 +130,39 @@ export async function getRelatedProducts(product: Product, limit = 4): Promise<P
 }
 
 export async function getCollections(): Promise<Collection[]> {
-  return collections;
+  return getCachedCollections();
 }
 
 export async function getCollectionBySlug(slug: string): Promise<Collection | undefined> {
-  return collections.find((c) => c.slug === slug);
+  const cached = unstable_cache(
+    async (s: string) => {
+      const row = await getActiveCollectionBySlug(s);
+      return row ? dbCollectionToCollection(row) : null;
+    },
+    ["collection-by-slug"],
+    { tags: ["collections", `collection:${slug}`], revalidate: 3600 }
+  );
+  const collection = await cached(slug);
+  return collection ?? undefined;
 }
 
 export async function getNewArrivals(limit = 8): Promise<Product[]> {
+  const products = await getCachedProducts();
   return products.filter((p) => p.isNew).slice(0, limit);
 }
 
 export async function getBestSellers(limit = 8): Promise<Product[]> {
+  const products = await getCachedProducts();
   return products.filter((p) => p.isBestSeller).slice(0, limit);
 }
 
 export async function getAllCategories(): Promise<string[]> {
+  const products = await getCachedProducts();
   return Array.from(new Set(products.map((p) => p.category)));
 }
 
 export async function getAllSleeveOptions(): Promise<SleeveOption[]> {
+  const products = await getCachedProducts();
   const set = new Set<SleeveOption>();
   products.forEach((p) => p.sleeveOptions?.forEach((s) => set.add(s)));
   return Array.from(set);
