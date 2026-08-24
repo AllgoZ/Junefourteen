@@ -1,5 +1,4 @@
-# Junefourteen
-
+# Junefourteensite
 Premium women's ethnic-contemporary fashion — frontend prototype built with Next.js
 (App Router), TypeScript, Tailwind CSS, and shadcn/ui.
 
