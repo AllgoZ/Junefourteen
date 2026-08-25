@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { AdminCard } from "@/components/admin/ui/card";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrderForAdmin } from "@/lib/repositories/admin/orders";
-import { updateOrderStatusAction } from "@/app/admin/(protected)/orders/actions";
+import { updateOrderStatusAction, updateOrderTrackingAction } from "@/app/admin/(protected)/orders/actions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatPrice } from "@/lib/format";
 import type { Json } from "@/lib/supabase/types";
 
@@ -90,6 +92,45 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </label>
             <Button type="submit" size="sm" className="mt-1 self-start">
               Update Status
+            </Button>
+          </form>
+          {(order.razorpay_order_id || order.razorpay_payment_id) && (
+            <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+              <p>Payment Reference</p>
+              {order.razorpay_order_id && <p className="mt-0.5 font-mono">{order.razorpay_order_id}</p>}
+              {order.razorpay_payment_id && <p className="mt-0.5 font-mono">{order.razorpay_payment_id}</p>}
+            </div>
+          )}
+        </AdminCard>
+
+        <AdminCard title="Tracking" description="Shown to the customer on their order detail page once set.">
+          <form action={updateOrderTrackingAction} className="flex flex-col gap-3">
+            <input type="hidden" name="id" value={order.id} />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="order-tracking-number" className="text-xs font-medium text-muted-foreground">
+                Tracking Number
+              </Label>
+              <Input
+                id="order-tracking-number"
+                name="trackingNumber"
+                defaultValue={order.tracking_number ?? ""}
+                placeholder="e.g. 1Z999AA10123456784"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="order-tracking-url" className="text-xs font-medium text-muted-foreground">
+                Tracking URL
+              </Label>
+              <Input
+                id="order-tracking-url"
+                name="trackingUrl"
+                type="url"
+                defaultValue={order.tracking_url ?? ""}
+                placeholder="https://…"
+              />
+            </div>
+            <Button type="submit" size="sm" className="mt-1 self-start">
+              Save Tracking
             </Button>
           </form>
         </AdminCard>

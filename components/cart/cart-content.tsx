@@ -64,7 +64,7 @@ export function CartContent({
           variant === "drawer" ? "border-t border-border px-4 py-4 sm:px-6" : ""
         )}
       >
-        <ShippingEstimator />
+        <ShippingEstimator subtotal={subtotal} />
 
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>

@@ -11,6 +11,8 @@ import {
   ShoppingBag,
   Users,
   Settings,
+  Truck,
+  Ticket,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,8 @@ const LINKS = [
   { href: "/admin/collections", label: "Collections", icon: Layers },
   { href: "/admin/banners", label: "Banners", icon: Image },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/admin/shipping", label: "Shipping", icon: Truck },
+  { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;

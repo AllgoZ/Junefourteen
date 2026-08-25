@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateSignIn, validateSignUp, validateMobile, normalizePhone, hasAuthErrors } from "@/lib/validation";
@@ -108,6 +109,19 @@ export interface MobileAuthFormState {
  * number already has an account" beyond a clear error message —
  * passwordless re-login for a returning mobile-only customer is a
  * next-version problem, not solved here.
+ *
+ * This project's Supabase instance has the Phone auth provider disabled
+ * (confirmed directly: signInWithPassword({ phone }) fails with
+ * "phone_provider_disabled" even for a phone_confirm: true user created via
+ * the admin API) — using `phone` as the Auth identifier could never sign in,
+ * which is why this always fell through to "Account created, but sign-in
+ * failed". Using a synthetic, never-sent-to `.invalid` email (RFC 2606
+ * reserved, guaranteed non-routable) as the identifier instead goes through
+ * the Email provider, which is already enabled and used everywhere else in
+ * this app. The real phone number is still what gets stored on `profiles`
+ * and shown anywhere in the app — `profiles.email` is cleared for these
+ * accounts so the synthetic address never surfaces (e.g. in the admin
+ * customers list or account settings).
  */
 export async function signUpWithMobile(
   _prevState: MobileAuthFormState,
@@ -120,31 +134,43 @@ export async function signUpWithMobile(
 
   const phone = normalizePhone(mobile);
   const password = crypto.randomUUID();
+  const syntheticEmail = `mobile-${phone.replace(/\D/g, "")}@phone.invalid`;
 
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.createUser({
-    phone,
-    phone_confirm: true,
+    email: syntheticEmail,
+    email_confirm: true,
     password,
   });
 
   if (error || !data.user) {
     const form =
-      error?.code === "phone_exists"
+      error?.code === "email_exists"
         ? "An account with this number already exists. Sign in from your account page."
         : "Could not create your account. Please try again.";
     return { errors: { form } };
   }
 
   const supabase = await createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({ phone, password });
+  const { error: signInError } = await supabase.auth.signInWithPassword({ email: syntheticEmail, password });
   if (signInError) {
     return { errors: { form: "Account created, but sign-in failed — please try signing in." } };
   }
 
   // handle_new_user() only copies email/full_name onto the new profiles row
-  // (see supabase/migrations/0002_triggers.sql) — phone needs setting explicitly.
-  await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
+  // (see supabase/migrations/0002_triggers.sql) — phone needs setting explicitly,
+  // and the synthetic email is cleared so it never surfaces anywhere.
+  await supabase.from("profiles").update({ phone, email: null }).eq("id", data.user.id);
+
+  // signIn/signUp don't need this — they only ever run from the /account
+  // page itself, so Next automatically refreshes that route's Server
+  // Components once the action resolves. This action runs from wherever
+  // "Add to Bag"/"Buy Now" lives (a different route entirely), so a later
+  // client-side navigation to /account or /checkout (router.push, right
+  // after this resolves for the Buy Now path) could otherwise serve an
+  // already-cached, pre-signup render that still shows signed-out UI.
+  revalidatePath("/account");
+  revalidatePath("/checkout");
 
   return mergeAndRespond(formData);
 }

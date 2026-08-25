@@ -36,3 +36,32 @@ export async function listCustomersForAdmin(admin: SupabaseClient<Database>): Pr
     orderCount: orderCounts.get(p.id) ?? 0,
   }));
 }
+
+export interface AdminCustomerDetail {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  phone: string | null;
+  createdAt: string;
+}
+
+export async function getCustomerForAdmin(
+  admin: SupabaseClient<Database>,
+  id: string
+): Promise<AdminCustomerDetail | null> {
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, email, full_name, phone, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`getCustomerForAdmin: ${error.message}`);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    email: data.email,
+    fullName: data.full_name,
+    phone: data.phone,
+    createdAt: data.created_at,
+  };
+}

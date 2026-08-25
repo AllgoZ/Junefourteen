@@ -472,6 +472,34 @@ shells out to Docker regardless of `--db-url` — with no Docker daemon
 running, hand-write `lib/supabase/types.ts` against the migrations instead
 (see §14 for what's in it).
 
+### 9.15 A Server Action's route refresh only covers the route that invoked it
+Companion gotcha to §9.13, but on the *server* side: after a Server Action
+resolves, Next automatically re-renders the Server Components of the route
+that called it — that's why `signIn`/`signUp` (`lib/services/auth.ts`) never
+needed a manual revalidation, since `AccountAuthForms` only ever renders on
+`/account` itself. `signUpWithMobile` is invoked from `MobileSignupDialog`,
+which lives on the product page (`add-to-bag-panel.tsx`) — a completely
+different route. A real bug shipped from this: after mobile sign-up, the
+dialog closes (and, for "Buy Now", client-side `router.push("/checkout")`
+fires), but nothing told Next that `/account` or `/checkout` needed fresh
+data — a `<Link>` prefetched earlier while signed out (or the `router.push`
+navigation itself) could serve an already-cached, still-signed-out render of
+either page. Fixed by calling `revalidatePath("/account")` and
+`revalidatePath("/checkout")` at the end of `signUpWithMobile`, once the
+session/profile work is done — the general rule this leaves behind: any
+Server Action that establishes a session from a route other than the one
+that displays the result of being signed in must explicitly revalidate that
+other route.
+
+### 9.16 `server-only` taints the whole file it's imported into, not just the export you use
+A client component importing *any* named export from a file that
+transitively imports `server-only` fails the build, even if that export
+itself has no server dependency — the guard isn't tree-shaken around
+per-export, it throws at module evaluation. Hit when `lib/services/
+shipping.ts` gained a real DB read: three client components that only ever
+used its unrelated `INDIAN_STATES` constant broke. Full story and fix
+(a dedicated zero-dependency `lib/config/indian-states.ts`) in §16.
+
 ## 10. Design system (current baseline — see §12 for how it got here)
 
 - **Colors** (`app/(site)/globals.css`, plain hex not oklch): `#0A0A0A` primary black,
@@ -883,12 +911,17 @@ a few hundred products.
 
 ## 14. Database schema & RLS
 
-Fifteen tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
+Eighteen tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
 triggers.sql`, `0003_rls.sql`, `0004_lockdown_internal.sql`, `0005_profile_
 email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
-`0009_banner_mobile_image.sql` — `0008` is a plain `alter table products`
-with no new table, `0009` renames `banners`' original image columns to
-`desktop_*` and adds a parallel optional `mobile_*` set). One deliberate
+`0009_banner_mobile_image.sql`, `0010_banner_content_fields.sql`,
+`0011_order_tracking.sql`, `0012_order_payment_fields.sql`,
+`0013_shipping_coupons_tax.sql` — `0008`/`0011`/`0012` are plain `alter
+table` additions with no new table, `0009` renames `banners`' original
+image columns to `desktop_*` and adds a parallel optional `mobile_*` set,
+`0010` adds banners' optional overlay-copy columns, `0013` adds
+`shipping_zones`/`coupons`/`tax_settings` plus `orders.tax_amount`/
+`coupon_code`). One deliberate
 deviation from the backend brief's suggested
 shape: **`product_collections` is a many-to-many join table**, not a single
 `collection_id` FK on `products` — the mock data has products in multiple
@@ -904,7 +937,10 @@ and `everyday-edit`), which a single FK can't represent.
 | `banners` | Homepage hero carousel slides (`0006`, reshaped by `0009` and `0010`). Each row is one slide with **two independent images** — `desktop_image_url`/`desktop_image_alt`/`desktop_cloudinary_public_id`/`desktop_object_position` (the required horizontal/laptop photo) and `mobile_image_url`/`mobile_image_alt`/`mobile_cloudinary_public_id`/`mobile_object_position` (an optional, genuinely different vertical/mobile photo — not just a different crop of the desktop one; falls back to the desktop image + `mobile_object_position` when absent). Both `object_position` columns are CSS `object-position` strings (e.g. `"50% 35%"`); a manually pasted image URL (vs. a Cloudinary upload) leaves the matching `cloudinary_public_id` null. `0010` added optional overlay copy — `badge_text`, `headline` (required in the admin UI, stored `not null default ''`), `subheading`, `primary_cta_text`/`primary_cta_href` (renamed from `link_label`/`link_href`), `secondary_cta_text`/`secondary_cta_href`, `offer_badge_text` — all opt-in on the storefront (§17). Also `tone` (placeholder-gradient seed, same convention as `collections.tone`)/`sort_order`/`is_active` — multiple active rows is how the carousel gets more than one slide. Public-read policy on `is_active = true` rows, same shape as `collections`. Unlike every other admin-managed table, banners get a genuine hard delete (§17) since nothing else references a banner row. |
 | `social_links` | Footer/Instagram-grid social links (`0007`) — `label`/`href`/`sort_order`/`is_active`. Replace-all-on-save from the admin (§17), not per-row CRUD. |
 | `addresses`, `carts`, `cart_items`, `wishlist_items` | Owner-scoped via RLS. `cart_items` has a **partial unique index** (`cart_items_line_identity_idx`, `WHERE custom_measurements IS NULL`, keyed on `coalesce(size,'std')`/`coalesce(sleeve_option,'any')`) reproducing `cart-provider.tsx`'s `buildLineId` merge rule exactly — but see §16, the *application* merge logic (not a DB `ON CONFLICT`) is what actually enforces it, because a partial/expression unique index isn't targetable by the JS client's `upsert()`. |
-| `orders`, `order_items` | `orders.user_id` is **nullable** (guest checkout is supported — checkout never gated behind sign-in). `order_number` auto-generated (`JF-<year>-<6-digit-sequence>` via a Postgres sequence). `order_items` snapshots `product_name`/`slug`/`image`/`unit_price` at order time so history stays correct if the product later changes. |
+| `orders`, `order_items` | `orders.user_id` is **nullable** (guest checkout is supported — checkout never gated behind sign-in). `order_number` auto-generated (`JF-<year>-<6-digit-sequence>` via a Postgres sequence). `order_items` snapshots `product_name`/`slug`/`image`/`unit_price` at order time so history stays correct if the product later changes. `0011` adds nullable `tracking_number`/`tracking_url`, admin-settable, shown to the customer once set (§16/§17). `0012` adds `razorpay_order_id`/`razorpay_payment_id` (§16). `0013` adds `tax_amount` (new) and finally wires up `discount_amount` (existed since `0001`, never used until now) + a new `coupon_code` snapshot column (§16). |
+| `shipping_zones` | Admin-managed replacement for the old static rate table (`0013`) — `name`, `states text[]`, `rate`, `free_shipping_threshold` (nullable), `eta_min_days`/`eta_max_days`, `is_default` (the catch-all for any state not listed in another zone — enforced in the admin action, not a DB constraint, same as `addresses.is_default`), `sort_order`, `is_active`. RLS-enabled with **no policies** (default-deny) — only ever read/written via the service-role client (§16/§17), same reasoning as `orders`. Real hard delete (§17), same reasoning as `banners`. |
+| `coupons` | `0013` — `code` (unique, stored uppercase), `discount_type` (`percentage`/`fixed`), `discount_value`, `min_order_amount`, `max_discount_amount` (nullable, caps a percentage discount), `starts_at`/`expires_at` (nullable), `usage_limit` (nullable = unlimited), `times_used`, `is_active`. Same RLS-locked-down, service-role-only, hard-delete shape as `shipping_zones`. Validated fresh on every checkout attempt (`lib/services/coupons.ts#validateCoupon`, never cached) — re-validated server-side inside `createOrderAction` regardless of what the client's earlier "Apply" preview said (§16). |
+| `tax_settings` | `0013` — a **singleton row** (`id boolean primary key default true check (id)`, the standard Postgres one-row-table trick; the migration inserts that one row itself). `rate_percent`, `label`, `is_active` — one global rate, off by default. |
 | `schema_migrations` | Migration-runner bookkeeping (§20), not app data — RLS-locked to deny-all via PostgREST (`0004`), reachable only by direct Postgres connection or the service-role client. |
 
 **RLS philosophy** (all policies in `0003_rls.sql`): public `SELECT` on
@@ -1016,6 +1052,133 @@ form for an inline order-confirmation state — the only UI change this step
 required, per the brief's "only touch the UI when connecting real
 functionality requires it."
 
+**Address reuse at checkout.** `addresses` (§14) already had a full CRUD
+panel on `/account` (`AddressesPanel`, `lib/services/addresses.ts`'s
+`addAddress`/`deleteAddress`) but checkout never looked at it — every
+checkout started from a blank form. `app/(site)/checkout/page.tsx` now
+fetches `listAddressesForUser` for a signed-in visitor and passes it to
+`CheckoutContent`, which renders a "Use a saved address" `Select` above the
+Shipping Address fields (picking one just fills the same controlled
+`form` state — no new form fields, no change to manual entry) and, only
+when signed in, a "Save this address for next time" checkbox (checked by
+default). `createOrderAction` gained one additive optional parameter,
+`{ saveAddress?: boolean }` — after the existing order/cart-clear logic
+(untouched), it saves the address via a new `lib/repositories/
+addresses.ts#createAddressForUser` (the same insert shape `addAddress`
+already builds, extracted so checkout doesn't depend on that action's
+FormData/`"use server"` contract; `addAddress` itself is unmodified). A
+user's first saved address becomes their default automatically, matching
+`AddressesPanel`'s own "first address" UX; later ones never silently
+override an existing default. The save step is wrapped in a `try/catch` —
+it's best-effort, since the order is already placed by that point and a
+failure here shouldn't turn a successful checkout into an error. Verified
+directly against the live database with a throwaway test account (not just
+type-checked): first address → `is_default: true`, second → `false`.
+
+**Customer order detail page.** New `app/(site)/account/orders/[id]/page.tsx`
+reuses the already-existing `getOrderWithItems` (`lib/repositories/
+orders.ts`) with the cookie-bound client — RLS (`orders_owner_select:
+auth.uid() = user_id`, §14) means this returns `null` both for a
+nonexistent order and for one that belongs to someone else, and the page
+calls `notFound()` on that either way rather than distinguishing the two
+(never confirm/deny that a given order id exists to a non-owner). Verified
+directly against the database with two throwaway accounts: the owner reads
+their order fine, a second signed-in account gets `null` for the same id.
+`OrdersPanel` on `/account` now links each row to this page instead of
+rendering a plain `<li>`.
+
+**Order tracking** (`0011_order_tracking.sql`): `orders` gains nullable
+`tracking_number`/`tracking_url`. Admin's order detail page
+(`app/admin/(protected)/orders/[id]/page.tsx`) gets a new, separate
+"Tracking" `AdminCard` (own form, own `updateOrderTrackingAction`/
+`updateOrderTrackingForAdmin`) — the existing Status card and
+`updateOrderStatusAction` are untouched. The customer order detail page
+shows a "Shipment Tracking" block once either field is set: a clickable
+link when `tracking_url` exists (label = `tracking_number` if also set,
+else "Track Package"), or just the plain number if only that's set: every
+order created before this migration renders exactly as it did before
+(nothing shows).
+
+**Payment (Razorpay, `0012_order_payment_fields.sql` adds `orders.razorpay_
+order_id`/`razorpay_payment_id`, both nullable).** Replaces the old
+"Payment integration coming soon" placeholder. `lib/payments/razorpay.ts`
+(`server-only`) — lazy singleton client (same pattern as `lib/cloudinary/
+admin.ts`), `createRazorpayOrder(amountInRupees, receipt)`, and
+`verifyRazorpaySignature(orderId, paymentId, signature)` (HMAC-SHA256 of
+`"<order_id>|<payment_id>"` with the key secret, compared via
+`crypto.timingSafeEqual` — not `===` — to avoid a timing side-channel).
+`lib/payments/razorpay-client.ts` is the client-safe half: `loadRazorpay
+Checkout()` injects Checkout.js (`https://checkout.razorpay.com/v1/
+checkout.js`) lazily, only when a visitor is actually about to pay, plus
+the `Window.Razorpay` type declaration.
+
+Flow (`app/(site)/checkout/actions.ts`): `createOrderAction` still creates
+the `orders`/`order_items` rows exactly as before (`status`/`payment_status`
+both default `"pending"`) but **no longer clears the cart** — it also
+creates a matching Razorpay order and returns its id + the key id (read
+fresh from `process.env.RAZORPAY_KEY_ID` per request; this value isn't a
+secret, so returning it from a Server Action rather than a `NEXT_PUBLIC_`
+env var was a deliberate choice — avoids ever needing to expose it as a
+build-time public var). `checkout-content.tsx` then opens Checkout.js with
+that order id; its `handler` callback posts the resulting `razorpay_
+payment_id`/`razorpay_signature` to a new `verifyRazorpayPaymentAction`,
+which is **the only place an order is ever marked paid** — it checks the
+signature first and rejects anything that doesn't verify (never trusts a
+client-reported "success" alone), then double-checks the order's stored
+`razorpay_order_id` actually matches the one being verified (replay/
+cross-order protection), then calls `markOrderPaid` (`payment_status:
+"paid"`, `status: "confirmed"`) and only *then* clears the cart. If the
+visitor dismisses the Checkout.js modal without paying, the already-created
+order/Razorpay-order pair is kept in client state (`pendingOrder`) so
+clicking "Complete Payment" again reopens the *same* Razorpay order instead
+of creating a duplicate — the DB order stays `"pending"` either way, which
+is an expected, admin-visible state (no separate abandoned-order cleanup
+exists, matching this project's v1 scope elsewhere). No webhook endpoint is
+set up — the signature-verified client callback is Razorpay's own
+documented minimum-viable integration; a webhook would additionally cover
+"payment succeeded but the browser closed before the callback fired," noted
+here as a real gap, not silently ignored.
+
+**Shipping, coupons, and tax (`0013_shipping_coupons_tax.sql`).** Replaces
+the old hardcoded `lib/shipping/rate-table.ts` and wires up the
+`discount_amount` column that had existed since `0001` but was never set to
+anything but `0`. `lib/services/shipping.ts#getShippingEstimate` now
+matches the shipping address's state against admin-managed
+`shipping_zones` (falling back to the zone marked `is_default`, and — if a
+store has zero zones configured yet — to the *original* static-table
+constants, so checkout never breaks on a fresh install). This is a real DB
+read, unlike the old pure-constants version, which is why it moved behind
+a Server Action (`estimateShippingAction`,
+`app/(site)/checkout/actions.ts`) — a client component can no longer call
+it directly. `createOrderAction` computes `discountAmount` (via
+`validateCoupon`, re-validated from scratch server-side — never trusts the
+client's earlier "Apply" preview) and `taxAmount` (`(subtotal -
+discount) × rate_percent`, `0` whenever tax is inactive) itself, folds both
+into `total`, and — only after the order row is actually created —
+increments the coupon's `times_used` (`recordCouponUsage`). Free shipping
+(`shipping_zones.free_shipping_threshold`) is evaluated against the raw
+subtotal, not the post-discount amount, in both the live preview
+(`checkout-content.tsx`) and the final order.
+
+**A real client/server-boundary bug hit while building this**:
+`INDIAN_STATES` used to live in `lib/services/shipping.ts` alongside
+`getShippingEstimate`, and three client components
+(`checkout-content.tsx`, `cart/shipping-estimator.tsx`,
+`account/addresses-panel.tsx`) imported it from there. Once
+`getShippingEstimate` started doing a real DB read through
+`createAdminClient()` (`server-only`-guarded), importing *anything* from
+that file — even an unrelated constant — pulled the whole server-only
+dependency chain into the client bundle and failed the build outright
+(`server-only` is deliberately not tree-shakeable around this; that's the
+point of the guard). Fixed by giving `INDIAN_STATES` its own zero-dependency
+leaf module, `lib/config/indian-states.ts`, which is what client components
+now import; `lib/services/shipping.ts` only re-exports it for the
+server-rendered admin pages that already imported it from that path. The
+general rule this leaves behind: a constant that needs to be safely
+client-importable can never share a file with server-only logic, even via
+re-export from the tainted file itself — only a direct import from a clean
+module avoids the taint.
+
 ## 17. Admin CMS
 
 Fully isolated from the storefront via Next's **multiple-root-layouts**
@@ -1109,13 +1272,28 @@ per-row save via `useTransition`, not a page-wide form, matching
 "Organization" card for single-product convenience — both write to the same
 `products` columns, §14), `/admin/orders` (+ `[id]` — list/detail/status
 update, no customer-facing write path exists for these tables),
-`/admin/customers` (read-only), `/admin/settings` (signed-in-admin info +
-credential changes, plus a `SocialLinksForm` card — an editable list of
+`/admin/customers` (read-only list + `[id]` detail page — full profile info,
+saved addresses via `lib/repositories/addresses.ts#listAddressesForUser`
+called with the **admin** client instead of the cookie-bound one it's
+documented for, which works with no code changes since it just filters
+`.eq("user_id", userId)` and RLS is bypassed rather than needing to match
+`auth.uid()`; and every order via a new `listOrdersForCustomer`, each
+linking to the existing `/admin/orders/[id]`), `/admin/shipping` (+
+`new`/`[id]` — full CRUD + real delete over `shipping_zones`, following the
+Collections template exactly, states picked via the same chip-`Checkbox
+Group` pattern as `product-form.tsx`'s sizes/sleeves, §16), `/admin/
+coupons` (+ `new`/`[id]` — same template, plus a read-only "Used N times"
+count on the edit page since `times_used` is only ever changed by checkout
+itself, §16), `/admin/settings`
+(signed-in-admin info +
+credential changes, a `SocialLinksForm` card — an editable list of
 label/URL rows, add/remove client-side, one "Save" replaces the entire
 `social_links` table via `lib/repositories/admin/social-links.ts`'s
 `replaceSocialLinks`, mirroring `replaceProductRelations`'s delete-then-
 reinsert convention since there's no per-row identity worth preserving for a
-handful of footer links edited as one list).
+handful of footer links edited as one list, and now a `TaxSettingsForm`
+card — rate/label/active toggle over the `tax_settings` singleton row, no
+new nav entry the same way Social Links didn't get one, §16).
 
 Storefront consumers of the two new tables fall back to hardcoded defaults
 when empty, so an unconfigured store never regresses: `hero-section.tsx`'s
@@ -1213,6 +1391,10 @@ SUPABASE_DB_URL                          # session-pooler URL, scripts only (§9
 CLOUDINARY_CLOUD_NAME
 CLOUDINARY_API_KEY
 CLOUDINARY_API_SECRET
+RAZORPAY_KEY_ID                          # server-only; also returned per-request to the client from the checkout
+                                          # Server Actions (Razorpay's key_id isn't a secret and must reach
+                                          # Checkout.js) — never given a NEXT_PUBLIC_ prefix, §16
+RAZORPAY_KEY_SECRET                      # server-only, never leaves the server — signs/verifies payments
 ```
 
 **Migrations** (`supabase/migrations/*.sql`, numbered, applied in order):

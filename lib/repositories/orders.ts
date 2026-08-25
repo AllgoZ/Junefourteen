@@ -59,6 +59,9 @@ export interface NewOrder {
   phone: string;
   subtotal: number;
   shippingAmount: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  couponCode?: string | null;
   total: number;
   shippingAddress: Database["public"]["Tables"]["orders"]["Row"]["shipping_address"];
   items: NewOrderItem[];
@@ -83,6 +86,9 @@ export async function createOrder(
       phone: input.phone,
       subtotal: input.subtotal,
       shipping_amount: input.shippingAmount,
+      discount_amount: input.discountAmount ?? 0,
+      tax_amount: input.taxAmount ?? 0,
+      coupon_code: input.couponCode ?? null,
       total: input.total,
       shipping_address: input.shippingAddress,
     })
@@ -107,4 +113,31 @@ export async function createOrder(
   if (itemsError) throw new Error(`createOrder items: ${itemsError.message}`);
 
   return { id: order.id, orderNumber: order.order_number };
+}
+
+/** Called right after the order row is created, once the matching Razorpay order exists. */
+export async function setOrderRazorpayOrderId(
+  admin: SupabaseClient<Database>,
+  orderId: string,
+  razorpayOrderId: string
+): Promise<void> {
+  const { error } = await admin.from("orders").update({ razorpay_order_id: razorpayOrderId }).eq("id", orderId);
+  if (error) throw new Error(`setOrderRazorpayOrderId: ${error.message}`);
+}
+
+/**
+ * Only ever called after lib/payments/razorpay.ts#verifyRazorpaySignature
+ * has confirmed the callback is genuinely from Razorpay — never marks an
+ * order paid on the client's say-so alone.
+ */
+export async function markOrderPaid(
+  admin: SupabaseClient<Database>,
+  orderId: string,
+  razorpayPaymentId: string
+): Promise<void> {
+  const { error } = await admin
+    .from("orders")
+    .update({ payment_status: "paid", status: "confirmed", razorpay_payment_id: razorpayPaymentId })
+    .eq("id", orderId);
+  if (error) throw new Error(`markOrderPaid: ${error.message}`);
 }

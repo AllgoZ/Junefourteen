@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CreditCard, Truck } from "lucide-react";
+import { CreditCard, Truck, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,10 +17,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCart } from "@/components/providers/cart-provider";
-import { getShippingEstimate, INDIAN_STATES } from "@/lib/services/shipping";
-import { createOrderAction } from "@/app/(site)/checkout/actions";
+import { INDIAN_STATES } from "@/lib/config/indian-states";
+import {
+  createOrderAction,
+  verifyRazorpayPaymentAction,
+  estimateShippingAction,
+  applyCouponAction,
+} from "@/app/(site)/checkout/actions";
+import { loadRazorpayCheckout, type RazorpaySuccessResponse } from "@/lib/payments/razorpay-client";
 import { formatPrice } from "@/lib/format";
+import { site } from "@/lib/config/site";
 import type { ShippingEstimateResult } from "@/types/shipping";
+import type { AddressRow } from "@/lib/repositories/addresses";
 
 interface AddressForm {
   email: string;
@@ -44,6 +52,14 @@ const EMPTY_FORM: AddressForm = {
   pin: "",
 };
 
+interface PendingOrder {
+  orderId: string;
+  orderNumber: string;
+  razorpayOrderId: string;
+  razorpayKeyId: string;
+  amount: number;
+}
+
 function Section({
   step,
   title,
@@ -66,16 +82,48 @@ function Section({
   );
 }
 
-export function CheckoutContent() {
+export function CheckoutContent({
+  savedAddresses,
+  isSignedIn,
+  taxRate,
+}: {
+  savedAddresses: AddressRow[];
+  isSignedIn: boolean;
+  taxRate: { ratePercent: number; label: string } | null;
+}) {
   const { items, subtotal, clearCart } = useCart();
   const [form, setForm] = useState<AddressForm>(EMPTY_FORM);
   const [delivery, setDelivery] = useState<ShippingEstimateResult | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [saveAddress, setSaveAddress] = useState(true);
+  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   const update = (field: keyof AddressForm, value: string) => {
     setForm((f) => ({ ...f, [field]: value }));
+    setDelivery(null);
+  };
+
+  const applySavedAddress = (id: string) => {
+    setSelectedAddressId(id);
+    const address = savedAddresses.find((a) => a.id === id);
+    if (!address) return;
+    setForm((f) => ({
+      ...f,
+      fullName: address.full_name,
+      phone: address.phone,
+      addressLine1: address.address_line_1,
+      addressLine2: address.address_line_2 ?? "",
+      city: address.city,
+      state: address.state,
+      pin: address.postal_code,
+    }));
     setDelivery(null);
   };
 
@@ -84,14 +132,91 @@ export function CheckoutContent() {
   const estimateDelivery = async () => {
     if (!canEstimateDelivery) return;
     setEstimating(true);
-    const result = await getShippingEstimate({ country: "India", state: form.state, pin: form.pin });
+    const result = await estimateShippingAction({ country: "India", state: form.state, pin: form.pin, orderSubtotal: subtotal });
     setDelivery(result);
     setEstimating(false);
   };
 
-  const total = subtotal + (delivery?.amount ?? 0);
+  const applyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setApplyingCoupon(true);
+    setCouponError(null);
+    const result = await applyCouponAction(couponInput, subtotal);
+    setApplyingCoupon(false);
+
+    if (result.error || result.discountAmount == null || !result.code) {
+      setCouponError(result.error ?? "This coupon code isn't valid.");
+      return;
+    }
+    setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount });
+    setCouponInput("");
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError(null);
+  };
+
+  const discountAmount = appliedCoupon?.discountAmount ?? 0;
+  const taxableAmount = subtotal - discountAmount;
+  const taxAmount = taxRate ? Math.round(taxableAmount * (taxRate.ratePercent / 100) * 100) / 100 : 0;
+  const total = taxableAmount + (delivery?.amount ?? 0) + taxAmount;
+
+  const openRazorpayCheckout = async (order: PendingOrder) => {
+    setPlacing(true);
+    const loaded = await loadRazorpayCheckout();
+    if (!loaded || !window.Razorpay) {
+      setPlacing(false);
+      toast.error("Could not load the payment form. Please check your connection and try again.");
+      return;
+    }
+
+    const checkout = new window.Razorpay({
+      key: order.razorpayKeyId,
+      amount: order.amount,
+      currency: "INR",
+      name: site.name,
+      description: `Order ${order.orderNumber}`,
+      order_id: order.razorpayOrderId,
+      prefill: { name: form.fullName, email: form.email, contact: form.phone },
+      theme: { color: "#0A0A0A" },
+      handler: (response: RazorpaySuccessResponse) => {
+        void (async () => {
+          try {
+            const result = await verifyRazorpayPaymentAction({
+              orderId: order.orderId,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            if (result.error) {
+              toast.error(result.error);
+              setPlacing(false);
+              return;
+            }
+            clearCart();
+            setPlacing(false);
+            setOrderNumber(result.orderNumber ?? null);
+          } catch {
+            toast.error("Could not confirm your payment. Please contact support if you were charged.");
+            setPlacing(false);
+          }
+        })();
+      },
+      modal: {
+        ondismiss: () => setPlacing(false),
+      },
+    });
+
+    checkout.open();
+  };
 
   const placeOrder = async () => {
+    if (pendingOrder) {
+      await openRazorpayCheckout(pendingOrder);
+      return;
+    }
+
     setPlacing(true);
     const result = await createOrderAction(
       items.map(({ productId, size, sleeve, customMeasurements, quantity }) => ({
@@ -101,24 +226,32 @@ export function CheckoutContent() {
         customMeasurements,
         quantity,
       })),
-      { ...form }
+      { ...form },
+      { saveAddress: isSignedIn && saveAddress, couponCode: appliedCoupon?.code }
     );
-    setPlacing(false);
 
-    if (result.error) {
-      toast.error(result.error);
+    if (result.error || !result.orderId || !result.razorpayOrderId || !result.razorpayKeyId || result.amount == null) {
+      setPlacing(false);
+      toast.error(result.error ?? "Could not start checkout. Please try again.");
       return;
     }
 
-    clearCart();
-    setOrderNumber(result.orderNumber ?? null);
+    const next: PendingOrder = {
+      orderId: result.orderId,
+      orderNumber: result.orderNumber ?? "",
+      razorpayOrderId: result.razorpayOrderId,
+      razorpayKeyId: result.razorpayKeyId,
+      amount: result.amount,
+    };
+    setPendingOrder(next);
+    await openRazorpayCheckout(next);
   };
 
   if (orderNumber) {
     return (
       <EmptyState
         title="Order placed."
-        description={`Order ${orderNumber} is confirmed. Payment is currently a placeholder — we'll be in touch about next steps.`}
+        description={`Order ${orderNumber} is confirmed — payment received.`}
         action={
           <Button asChild>
             <Link href="/shop">Continue Shopping</Link>
@@ -162,6 +295,24 @@ export function CheckoutContent() {
         </Section>
 
         <Section step={2} title="Shipping Address">
+          {savedAddresses.length > 0 && (
+            <div className="mb-4 flex flex-col gap-1.5">
+              <Label htmlFor="checkout-saved-address">Use a saved address</Label>
+              <Select value={selectedAddressId} onValueChange={applySavedAddress}>
+                <SelectTrigger id="checkout-saved-address" className="w-full">
+                  <SelectValue placeholder="Choose a saved address, or enter a new one below" />
+                </SelectTrigger>
+                <SelectContent>
+                  {savedAddresses.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.full_name} — {a.address_line_1}, {a.city}
+                      {a.is_default ? " (Default)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5 sm:col-span-2">
               <Label htmlFor="checkout-name">Full Name</Label>
@@ -236,6 +387,18 @@ export function CheckoutContent() {
               />
             </div>
           </div>
+
+          {isSignedIn && (
+            <label className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={saveAddress}
+                onChange={(e) => setSaveAddress(e.target.checked)}
+                className="size-4 rounded border-input accent-foreground"
+              />
+              Save this address for next time
+            </label>
+          )}
         </Section>
 
         <Section step={3} title="Delivery Method">
@@ -267,12 +430,42 @@ export function CheckoutContent() {
           )}
         </Section>
 
-        <Section step={4} title="Payment">
-          <div className="flex items-center gap-3 rounded-md border border-dashed border-border bg-muted/50 p-4">
-            <CreditCard className="size-5 text-muted-foreground" aria-hidden="true" />
+        <Section step={4} title="Coupon">
+          {appliedCoupon ? (
+            <div className="flex items-center gap-3 rounded-md border border-foreground p-4">
+              <Tag className="size-4 shrink-0" aria-hidden="true" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">{appliedCoupon.code}</p>
+                <p className="text-xs text-muted-foreground">−{formatPrice(appliedCoupon.discountAmount)} applied</p>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={removeCoupon} aria-label="Remove coupon">
+                <X className="size-3.5" aria-hidden="true" />
+              </Button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Coupon code"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  className="max-w-xs"
+                />
+                <Button type="button" variant="outline" disabled={!couponInput.trim() || applyingCoupon} onClick={applyCoupon}>
+                  {applyingCoupon ? "Applying…" : "Apply"}
+                </Button>
+              </div>
+              {couponError && <p className="mt-2 text-xs text-destructive">{couponError}</p>}
+            </div>
+          )}
+        </Section>
+
+        <Section step={5} title="Payment">
+          <div className="flex items-center gap-3 rounded-md border border-border bg-muted/50 p-4">
+            <CreditCard className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <p className="text-sm text-muted-foreground">
-              Payment integration coming soon. Cards, UPI, and net banking will be available at
-              launch.
+              Pay securely with Cards, UPI, Netbanking, or Wallets via Razorpay — you&apos;ll
+              complete payment in a secure window after clicking Place Order below.
             </p>
           </div>
         </Section>
@@ -306,10 +499,26 @@ export function CheckoutContent() {
             <span className="text-muted-foreground">Subtotal</span>
             <span className="tabular-nums">{formatPrice(subtotal)}</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Discount{appliedCoupon ? ` (${appliedCoupon.code})` : ""}</span>
+              <span className="tabular-nums">−{formatPrice(discountAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Shipping</span>
-            <span className="tabular-nums">{delivery ? formatPrice(delivery.amount) : "—"}</span>
+            <span className="tabular-nums">
+              {delivery ? (delivery.amount === 0 ? "Free" : formatPrice(delivery.amount)) : "—"}
+            </span>
           </div>
+          {taxAmount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">
+                {taxRate?.label ?? "Tax"} ({taxRate?.ratePercent}%)
+              </span>
+              <span className="tabular-nums">{formatPrice(taxAmount)}</span>
+            </div>
+          )}
           <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-medium">
             <span>Total</span>
             <span className="tabular-nums">{formatPrice(total)}</span>
@@ -317,8 +526,19 @@ export function CheckoutContent() {
         </div>
 
         <Button size="lg" className="mt-6 w-full" disabled={placing} onClick={placeOrder}>
-          {placing ? "Placing Order…" : "Place Order"}
+          {placing
+            ? pendingOrder
+              ? "Opening Payment…"
+              : "Placing Order…"
+            : pendingOrder
+              ? "Complete Payment"
+              : "Place Order"}
         </Button>
+        {pendingOrder && !placing && (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Your order is saved — payment wasn&apos;t completed. Click above to try again.
+          </p>
+        )}
       </div>
     </div>
   );

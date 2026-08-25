@@ -32,23 +32,25 @@ export function OrdersPanel({ orders }: { orders: OrderRow[] }) {
   return (
     <ul className="flex flex-col gap-3 py-4 text-left">
       {orders.map((order) => (
-        <li
-          key={order.id}
-          className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
-        >
-          <div>
-            <p className="text-sm font-medium text-foreground">{order.order_number}</p>
-            <p className="text-xs text-muted-foreground">
-              {new Date(order.created_at).toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}
-              {" · "}
-              {STATUS_LABEL[order.status] ?? order.status}
-            </p>
-          </div>
-          <span className="text-sm font-medium tabular-nums">{formatPrice(order.total)}</span>
+        <li key={order.id} className="rounded-md border border-border">
+          <Link
+            href={`/account/orders/${order.id}`}
+            className="flex items-center justify-between gap-3 p-3 hover:bg-muted/50"
+          >
+            <div>
+              <p className="text-sm font-medium text-foreground">{order.order_number}</p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(order.created_at).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+                {" · "}
+                {STATUS_LABEL[order.status] ?? order.status}
+              </p>
+            </div>
+            <span className="text-sm font-medium tabular-nums">{formatPrice(order.total)}</span>
+          </Link>
         </li>
       ))}
     </ul>

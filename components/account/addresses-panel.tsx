@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { addAddress, deleteAddress, type AddressFormState } from "@/lib/services/addresses";
-import { INDIAN_STATES } from "@/lib/services/shipping";
+import { INDIAN_STATES } from "@/lib/config/indian-states";
 import type { AddressRow } from "@/lib/repositories/addresses";
 
 const INITIAL_STATE: AddressFormState = {};

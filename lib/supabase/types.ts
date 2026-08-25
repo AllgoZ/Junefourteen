@@ -330,6 +330,12 @@ export interface Database {
           currency: string;
           shipping_address: Json;
           billing_address: Json | null;
+          tracking_number: string | null;
+          tracking_url: string | null;
+          razorpay_order_id: string | null;
+          razorpay_payment_id: string | null;
+          tax_amount: number;
+          coupon_code: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -348,6 +354,12 @@ export interface Database {
           currency?: string;
           shipping_address: Json;
           billing_address?: Json | null;
+          tracking_number?: string | null;
+          tracking_url?: string | null;
+          razorpay_order_id?: string | null;
+          razorpay_payment_id?: string | null;
+          tax_amount?: number;
+          coupon_code?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -384,6 +396,92 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["order_items"]["Insert"]>;
+        Relationships: [];
+      };
+      shipping_zones: {
+        Row: {
+          id: string;
+          name: string;
+          states: string[];
+          rate: number;
+          free_shipping_threshold: number | null;
+          eta_min_days: number;
+          eta_max_days: number;
+          is_default: boolean;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          states?: string[];
+          rate: number;
+          free_shipping_threshold?: number | null;
+          eta_min_days: number;
+          eta_max_days: number;
+          is_default?: boolean;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["shipping_zones"]["Insert"]>;
+        Relationships: [];
+      };
+      coupons: {
+        Row: {
+          id: string;
+          code: string;
+          description: string | null;
+          discount_type: string;
+          discount_value: number;
+          min_order_amount: number;
+          max_discount_amount: number | null;
+          starts_at: string | null;
+          expires_at: string | null;
+          usage_limit: number | null;
+          times_used: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          description?: string | null;
+          discount_type: string;
+          discount_value: number;
+          min_order_amount?: number;
+          max_discount_amount?: number | null;
+          starts_at?: string | null;
+          expires_at?: string | null;
+          usage_limit?: number | null;
+          times_used?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["coupons"]["Insert"]>;
+        Relationships: [];
+      };
+      tax_settings: {
+        Row: {
+          id: boolean;
+          rate_percent: number;
+          label: string;
+          is_active: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          rate_percent?: number;
+          label?: string;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tax_settings"]["Insert"]>;
         Relationships: [];
       };
       schema_migrations: {

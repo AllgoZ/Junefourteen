@@ -12,14 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getShippingEstimate, INDIAN_STATES } from "@/lib/services/shipping";
+import { estimateShippingAction } from "@/app/(site)/checkout/actions";
+import { INDIAN_STATES } from "@/lib/config/indian-states";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ShippingEstimateResult } from "@/types/shipping";
 
 const PIN_PATTERN = /^\d{6}$/;
 
-export function ShippingEstimator() {
+export function ShippingEstimator({ subtotal }: { subtotal: number }) {
   const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState("");
   const [pin, setPin] = useState("");
@@ -38,7 +39,7 @@ export function ShippingEstimator() {
       return;
     }
     setStatus("loading");
-    const estimate = await getShippingEstimate({ country: "India", state, pin });
+    const estimate = await estimateShippingAction({ country: "India", state, pin, orderSubtotal: subtotal });
     setResult(estimate);
     setStatus("idle");
   };

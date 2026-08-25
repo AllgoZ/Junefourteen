@@ -44,6 +44,19 @@ export async function getOrderForAdmin(
   return { order, items: items ?? [] };
 }
 
+export async function listOrdersForCustomer(
+  admin: SupabaseClient<Database>,
+  userId: string
+): Promise<AdminOrderRow[]> {
+  const { data, error } = await admin
+    .from("orders")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`listOrdersForCustomer: ${error.message}`);
+  return data;
+}
+
 const VALID_STATUSES = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"];
 const VALID_PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded"];
 
@@ -61,4 +74,16 @@ export async function updateOrderStatusForAdmin(
 
   const { error } = await admin.from("orders").update(patch).eq("id", id);
   if (error) throw new Error(`updateOrderStatusForAdmin: ${error.message}`);
+}
+
+export async function updateOrderTrackingForAdmin(
+  admin: SupabaseClient<Database>,
+  id: string,
+  updates: { trackingNumber: string | null; trackingUrl: string | null }
+): Promise<void> {
+  const { error } = await admin
+    .from("orders")
+    .update({ tracking_number: updates.trackingNumber, tracking_url: updates.trackingUrl })
+    .eq("id", id);
+  if (error) throw new Error(`updateOrderTrackingForAdmin: ${error.message}`);
 }

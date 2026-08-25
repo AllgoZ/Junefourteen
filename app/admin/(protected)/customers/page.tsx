@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listCustomersForAdmin } from "@/lib/repositories/admin/customers";
@@ -33,12 +34,12 @@ export default async function AdminCustomersPage() {
               return (
                 <TableRow key={c.id}>
                   <TableCell>
-                    <div className="flex items-center gap-2.5">
+                    <Link href={`/admin/customers/${c.id}`} className="flex items-center gap-2.5 hover:underline">
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
                         {initial}
                       </span>
                       <span className="font-medium text-foreground">{c.fullName ?? "—"}</span>
-                    </div>
+                    </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{c.phone ?? "—"}</TableCell>

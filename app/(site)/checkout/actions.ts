@@ -3,11 +3,38 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySession } from "@/lib/auth/dal";
 import { getProductsForPricing } from "@/lib/repositories/products";
-import { createOrder, type NewOrderItem } from "@/lib/repositories/orders";
+import { createOrder, setOrderRazorpayOrderId, markOrderPaid, type NewOrderItem } from "@/lib/repositories/orders";
 import { getOrCreateCartId, clearCartItems } from "@/lib/repositories/cart";
 import { createClient } from "@/lib/supabase/server";
 import { getShippingEstimate } from "@/lib/services/shipping";
+import { listAddressesForUser, createAddressForUser } from "@/lib/repositories/addresses";
+import { createRazorpayOrder, verifyRazorpaySignature } from "@/lib/payments/razorpay";
+import { getActiveTaxRate } from "@/lib/services/tax";
+import { validateCoupon, recordCouponUsage } from "@/lib/services/coupons";
 import type { CartItem } from "@/types/cart";
+import type { ShippingEstimateInput, ShippingEstimateResult } from "@/types/shipping";
+
+/**
+ * Thin Server Action wrapper — getShippingEstimate now does a real DB read
+ * (lib/services/shipping.ts), so it can no longer be called directly from
+ * the client component the way the old pure-constants version could be.
+ */
+export async function estimateShippingAction(input: ShippingEstimateInput): Promise<ShippingEstimateResult> {
+  return getShippingEstimate(input);
+}
+
+export interface ApplyCouponResult {
+  discountAmount?: number;
+  code?: string;
+  error?: string;
+}
+
+/** Preview only — createOrderAction re-validates from scratch and is the only call that actually counts. */
+export async function applyCouponAction(code: string, subtotal: number): Promise<ApplyCouponResult> {
+  const result = await validateCoupon(code, subtotal);
+  if (!result.valid) return { error: result.error };
+  return { discountAmount: result.discountAmount, code: result.code };
+}
 
 export interface CheckoutAddressInput {
   email: string;
@@ -21,7 +48,12 @@ export interface CheckoutAddressInput {
 }
 
 export interface CreateOrderResult {
+  orderId?: string;
   orderNumber?: string;
+  razorpayOrderId?: string;
+  razorpayKeyId?: string;
+  /** Paise — what Checkout expects, already the exact amount the Razorpay order was created for. */
+  amount?: number;
   error?: string;
 }
 
@@ -30,10 +62,17 @@ export interface CreateOrderResult {
  * every price is re-derived from the live catalog here — the client-supplied
  * `price`/`compareAtPrice` on each line is never read. See backend brief
  * §21: "Never trust client-provided price/subtotal/shipping/discount/total."
+ *
+ * Creates the order (status/payment_status both start "pending", matching
+ * the schema default) and a matching Razorpay order, but does **not** clear
+ * the cart yet — that only happens once verifyRazorpayPaymentAction confirms
+ * a genuinely signed payment, so an abandoned/failed payment leaves the
+ * cart intact for a retry.
  */
 export async function createOrderAction(
   cartItems: Pick<CartItem, "productId" | "size" | "sleeve" | "customMeasurements" | "quantity">[],
-  address: CheckoutAddressInput
+  address: CheckoutAddressInput,
+  options: { saveAddress?: boolean; couponCode?: string } = {}
 ): Promise<CreateOrderResult> {
   if (cartItems.length === 0) {
     return { error: "Your bag is empty." };
@@ -78,18 +117,37 @@ export async function createOrderAction(
   }
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const shipping = await getShippingEstimate({ country: "India", state: address.state, pin: address.pin });
-  const total = subtotal + shipping.amount;
+  const shipping = await getShippingEstimate({ country: "India", state: address.state, pin: address.pin, orderSubtotal: subtotal });
+
+  let discountAmount = 0;
+  let appliedCoupon: { couponId: string; code: string } | null = null;
+  if (options.couponCode) {
+    const couponResult = await validateCoupon(options.couponCode, subtotal);
+    if (!couponResult.valid) {
+      return { error: couponResult.error };
+    }
+    discountAmount = couponResult.discountAmount;
+    appliedCoupon = { couponId: couponResult.couponId, code: couponResult.code };
+  }
+
+  const taxRate = await getActiveTaxRate();
+  const taxableAmount = subtotal - discountAmount;
+  const taxAmount = taxRate ? Math.round(taxableAmount * (taxRate.ratePercent / 100) * 100) / 100 : 0;
+
+  const total = subtotal - discountAmount + shipping.amount + taxAmount;
 
   const user = await verifySession();
 
   const admin = createAdminClient();
-  const { orderNumber } = await createOrder(admin, {
+  const { id: orderId, orderNumber } = await createOrder(admin, {
     userId: user?.id ?? null,
     email: address.email,
     phone: address.phone,
     subtotal,
     shippingAmount: shipping.amount,
+    discountAmount,
+    taxAmount,
+    couponCode: appliedCoupon?.code ?? null,
     total,
     shippingAddress: {
       fullName: address.fullName,
@@ -104,11 +162,94 @@ export async function createOrderAction(
     items: orderItems,
   });
 
-  if (user) {
+  if (appliedCoupon) {
+    await recordCouponUsage(appliedCoupon.couponId);
+  }
+
+  if (user && options.saveAddress) {
+    // Best-effort: the order is already placed at this point, so a failure
+    // here shouldn't block checkout from continuing to payment.
+    try {
+      const existing = await listAddressesForUser(admin, user.id);
+      await createAddressForUser(
+        admin,
+        user.id,
+        {
+          fullName: address.fullName,
+          phone: address.phone,
+          addressLine1: address.addressLine1,
+          addressLine2: address.addressLine2 || null,
+          city: address.city,
+          state: address.state,
+          postalCode: address.pin,
+        },
+        existing.length === 0
+      );
+    } catch {
+      // ignored — see comment above
+    }
+  }
+
+  try {
+    const razorpayOrder = await createRazorpayOrder(total, orderNumber);
+    await setOrderRazorpayOrderId(admin, orderId, razorpayOrder.id);
+    return {
+      orderId,
+      orderNumber,
+      razorpayOrderId: razorpayOrder.id,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+      amount: razorpayOrder.amount,
+    };
+  } catch {
+    // The order row already exists (status "pending") — an admin can see it
+    // and the customer can be told to retry; nothing to roll back.
+    return { error: "Could not start payment. Please try again." };
+  }
+}
+
+export interface VerifyPaymentInput {
+  orderId: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface VerifyPaymentResult {
+  orderNumber?: string;
+  error?: string;
+}
+
+/**
+ * The only place an order is ever marked paid. Verifies the HMAC signature
+ * Razorpay Checkout returned (lib/payments/razorpay.ts) before touching
+ * anything — a client that reports success without a valid signature is
+ * rejected, not trusted.
+ */
+export async function verifyRazorpayPaymentAction(input: VerifyPaymentInput): Promise<VerifyPaymentResult> {
+  const valid = verifyRazorpaySignature(input.razorpayOrderId, input.razorpayPaymentId, input.razorpaySignature);
+  if (!valid) {
+    return { error: "Payment verification failed. If money was deducted, it will be refunded automatically." };
+  }
+
+  const admin = createAdminClient();
+
+  const { data: order, error: orderError } = await admin
+    .from("orders")
+    .select("id, order_number, user_id, razorpay_order_id")
+    .eq("id", input.orderId)
+    .maybeSingle();
+
+  if (orderError || !order || order.razorpay_order_id !== input.razorpayOrderId) {
+    return { error: "Could not confirm this order. Please contact support if you were charged." };
+  }
+
+  await markOrderPaid(admin, order.id, input.razorpayPaymentId);
+
+  if (order.user_id) {
     const supabase = await createClient();
-    const cartId = await getOrCreateCartId(supabase, user.id);
+    const cartId = await getOrCreateCartId(supabase, order.user_id);
     await clearCartItems(admin, cartId);
   }
 
-  return { orderNumber };
+  return { orderNumber: order.order_number };
 }
