@@ -484,6 +484,56 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["tax_settings"]["Insert"]>;
         Relationships: [];
       };
+      homepage_campaign: {
+        Row: {
+          id: boolean;
+          image_url: string;
+          cloudinary_public_id: string | null;
+          image_alt: string;
+          tone: number;
+          link_label: string;
+          link_href: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          image_url: string;
+          cloudinary_public_id?: string | null;
+          image_alt?: string;
+          tone?: number;
+          link_label?: string;
+          link_href?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["homepage_campaign"]["Insert"]>;
+        Relationships: [];
+      };
+      homepage_gallery_images: {
+        Row: {
+          id: string;
+          image_url: string;
+          cloudinary_public_id: string | null;
+          image_alt: string;
+          tone: number;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          image_url: string;
+          cloudinary_public_id?: string | null;
+          image_alt?: string;
+          tone?: number;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["homepage_gallery_images"]["Insert"]>;
+        Relationships: [];
+      };
       schema_migrations: {
         Row: { filename: string; applied_at: string };
         Insert: { filename: string; applied_at?: string };

@@ -10,6 +10,12 @@ import {
   setCollectionActive,
   type CollectionFormInput,
 } from "@/lib/repositories/admin/collections";
+import {
+  getHomepageCampaignForAdmin,
+  upsertHomepageCampaignForAdmin,
+  listHomepageGalleryImagesForAdmin,
+  updateHomepageGalleryImage,
+} from "@/lib/repositories/admin/homepage";
 import { uploadImage, deleteImage } from "@/lib/cloudinary/admin";
 
 export interface CollectionFormState {
@@ -103,4 +109,88 @@ export async function setCollectionActiveAction(formData: FormData): Promise<voi
   await setCollectionActive(admin, id, isActive);
   revalidateTag("collections", "max");
   revalidatePath("/admin/collections");
+}
+
+export interface HomepageCampaignFormState {
+  error?: string;
+  success?: boolean;
+}
+
+export async function saveHomepageCampaignAction(
+  _prevState: HomepageCampaignFormState,
+  formData: FormData
+): Promise<HomepageCampaignFormState> {
+  await requireAdmin();
+  const admin = createAdminClient();
+
+  const existing = await getHomepageCampaignForAdmin(admin);
+  let imageUrl = existing.image_url;
+  let cloudinaryPublicId = existing.cloudinary_public_id;
+
+  const file = formData.get("image");
+  if (file instanceof File && file.size > 0) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const uploaded = await uploadImage(buffer, "homepage");
+    if (cloudinaryPublicId) await deleteImage(cloudinaryPublicId).catch(() => {});
+    imageUrl = uploaded.url;
+    cloudinaryPublicId = uploaded.publicId;
+  }
+
+  const imageAlt = String(formData.get("imageAlt") ?? "").trim() || existing.image_alt;
+  const linkLabel = String(formData.get("linkLabel") ?? "").trim() || "Shop Collection";
+  const linkHref = String(formData.get("linkHref") ?? "").trim() || "/shop";
+
+  try {
+    await upsertHomepageCampaignForAdmin(admin, { imageUrl, cloudinaryPublicId, imageAlt, linkLabel, linkHref });
+    revalidateTag("homepage-campaign", "max");
+    revalidatePath("/admin/collections");
+    revalidatePath("/");
+    return { success: true };
+  } catch {
+    return { error: "Could not save the campaign banner. Please try again." };
+  }
+}
+
+export interface HomepageGalleryFormState {
+  error?: string;
+  success?: boolean;
+}
+
+export async function saveHomepageGalleryImageAction(
+  _prevState: HomepageGalleryFormState,
+  formData: FormData
+): Promise<HomepageGalleryFormState> {
+  await requireAdmin();
+  const admin = createAdminClient();
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "Missing image slot id." };
+
+  const rows = await listHomepageGalleryImagesForAdmin(admin);
+  const existing = rows.find((row) => row.id === id);
+  if (!existing) return { error: "That image slot no longer exists." };
+
+  let imageUrl = existing.image_url;
+  let cloudinaryPublicId = existing.cloudinary_public_id;
+
+  const file = formData.get("image");
+  if (file instanceof File && file.size > 0) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const uploaded = await uploadImage(buffer, "homepage");
+    if (cloudinaryPublicId) await deleteImage(cloudinaryPublicId).catch(() => {});
+    imageUrl = uploaded.url;
+    cloudinaryPublicId = uploaded.publicId;
+  }
+
+  const imageAlt = String(formData.get("imageAlt") ?? "").trim() || existing.image_alt;
+
+  try {
+    await updateHomepageGalleryImage(admin, { id, imageUrl, cloudinaryPublicId, imageAlt });
+    revalidateTag("homepage-gallery-images", "max");
+    revalidatePath("/admin/collections");
+    revalidatePath("/");
+    return { success: true };
+  } catch {
+    return { error: "Could not save this image. Please try again." };
+  }
 }

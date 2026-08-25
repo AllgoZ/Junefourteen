@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -76,12 +76,14 @@ export function ProductForm({
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(saveProductAction, INITIAL_STATE);
+  const [imageUploading, setImageUploading] = useState(false);
 
   useEffect(() => {
-    if (state.productId && !product) {
-      router.push(`/admin/products/${state.productId}`);
+    if (state.productId) {
+      toast.success("Product saved.");
+      router.push("/admin/products");
     }
-  }, [state.productId, product, router]);
+  }, [state.productId, router]);
 
   return (
     // Images live outside this <form> — ProductImagesManager renders its own
@@ -217,14 +219,21 @@ export function ProductForm({
 
         {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
-        <div className="sticky bottom-4 flex justify-end">
-          <Button type="submit" disabled={pending} size="lg" className="shadow-[var(--shadow-elevated)]">
-            {pending ? "Saving…" : "Save Product"}
+        <div className="sticky bottom-4 flex flex-col items-end gap-1.5">
+          <Button type="submit" disabled={pending || imageUploading} size="lg" className="shadow-[var(--shadow-elevated)]">
+            {pending ? "Saving…" : imageUploading ? "Waiting for image upload…" : "Save Product"}
           </Button>
+          {imageUploading && (
+            <p className="rounded-md bg-card px-2 py-1 text-xs text-muted-foreground shadow-[var(--shadow-subtle)]">
+              Image uploading — please wait before saving.
+            </p>
+          )}
         </div>
       </form>
 
-      {product && <ProductImagesManager productId={product.id} images={product.images} />}
+      {product && (
+        <ProductImagesManager productId={product.id} images={product.images} onUploadingChange={setImageUploading} />
+      )}
     </div>
   );
 }

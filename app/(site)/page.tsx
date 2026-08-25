@@ -13,14 +13,16 @@ import {
   getProducts,
 } from "@/lib/services/products";
 import { getBanners } from "@/lib/services/banners";
+import { getCampaignBanner } from "@/lib/services/homepage";
 
 export default async function HomePage() {
-  const [banners, collections, newArrivals, bestSellers, blackEdit] = await Promise.all([
+  const [banners, collections, newArrivals, bestSellers, blackEdit, campaignBanner] = await Promise.all([
     getBanners(),
     getCollections(),
     getNewArrivals(6),
     getBestSellers(6),
     getProducts({ collectionSlugs: ["black-edit"] }),
+    getCampaignBanner(),
   ]);
 
   return (
@@ -40,10 +42,13 @@ export default async function HomePage() {
       <ScrollShowcaseSection colorProducts={bestSellers} blackProducts={blackEdit} />
 
       <CampaignImage
-        src="/images/model-cream-anarkali-blue-wall.webp"
-        tone={0.22}
-        alt="JUNEFOURTEEN campaign imagery"
-        link={{ label: "Shop Collection", href: "/shop" }}
+        src={campaignBanner?.imageUrl ?? "/images/model-cream-anarkali-blue-wall.webp"}
+        tone={campaignBanner?.tone ?? 0.22}
+        alt={campaignBanner?.imageAlt ?? "JUNEFOURTEEN campaign imagery"}
+        link={{
+          label: campaignBanner?.linkLabel ?? "Shop Collection",
+          href: campaignBanner?.linkHref ?? "/shop",
+        }}
       />
 
       <SocialSection />

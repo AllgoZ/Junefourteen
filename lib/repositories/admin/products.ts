@@ -304,6 +304,59 @@ export async function setProductActive(
   if (error) throw new Error(`setProductActive: ${error.message}`);
 }
 
+export async function bulkSetProductActive(
+  admin: SupabaseClient<Database>,
+  ids: string[],
+  isActive: boolean
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await admin.from("products").update({ is_active: isActive }).in("id", ids);
+  if (error) throw new Error(`bulkSetProductActive: ${error.message}`);
+}
+
+/** Which of these product ids have ever appeared in a paid/placed order — the ones a hard delete must never touch. */
+export async function getProductIdsWithOrders(admin: SupabaseClient<Database>, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const { data, error } = await admin.from("order_items").select("product_id").in("product_id", ids);
+  if (error) throw new Error(`getProductIdsWithOrders: ${error.message}`);
+  return new Set(data.map((row) => row.product_id).filter((id): id is string => id !== null));
+}
+
+export async function getProductNamesForIds(
+  admin: SupabaseClient<Database>,
+  ids: string[]
+): Promise<{ id: string; name: string }[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await admin.from("products").select("id, name").in("id", ids);
+  if (error) throw new Error(`getProductNamesForIds: ${error.message}`);
+  return data;
+}
+
+export async function getCloudinaryIdsForProducts(admin: SupabaseClient<Database>, ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await admin
+    .from("product_images")
+    .select("cloudinary_public_id")
+    .in("product_id", ids)
+    .not("cloudinary_public_id", "is", null);
+  if (error) throw new Error(`getCloudinaryIdsForProducts: ${error.message}`);
+  return data.map((row) => row.cloudinary_public_id).filter((id): id is string => id !== null);
+}
+
+/**
+ * A genuine hard delete — deliberately narrower than setProductActive's
+ * soft delete. Only ever called (see bulkDeleteProductsAction) for products
+ * confirmed via getProductIdsWithOrders to have zero order history, so the
+ * "could orphan order_items' historical snapshot reference" concern above
+ * never applies here. product_images/product_sizes/product_sleeve_options/
+ * product_collections all cascade; Cloudinary cleanup is the caller's job.
+ */
+export async function bulkDeleteProducts(admin: SupabaseClient<Database>, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await admin.from("products").delete().in("id", ids);
+  if (error) throw new Error(`bulkDeleteProducts: ${error.message}`);
+}
+
 export async function addProductImage(
   admin: SupabaseClient<Database>,
   productId: string,

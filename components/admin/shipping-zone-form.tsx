@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -36,10 +37,11 @@ export function ShippingZoneForm({ zone }: { zone?: AdminShippingZoneRow }) {
   const [state, action, pending] = useActionState(saveShippingZoneAction, INITIAL_STATE);
 
   useEffect(() => {
-    if (state.zoneId && !zone) {
-      router.push(`/admin/shipping/${state.zoneId}`);
+    if (state.zoneId) {
+      toast.success("Shipping zone saved.");
+      router.push("/admin/shipping");
     }
-  }, [state.zoneId, zone, router]);
+  }, [state.zoneId, router]);
 
   return (
     <form action={action} className="flex max-w-2xl flex-col gap-5">

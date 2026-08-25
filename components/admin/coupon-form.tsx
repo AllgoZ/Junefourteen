@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -24,10 +25,11 @@ export function CouponForm({ coupon }: { coupon?: AdminCouponRow }) {
   );
 
   useEffect(() => {
-    if (state.couponId && !coupon) {
-      router.push(`/admin/coupons/${state.couponId}`);
+    if (state.couponId) {
+      toast.success("Coupon saved.");
+      router.push("/admin/coupons");
     }
-  }, [state.couponId, coupon, router]);
+  }, [state.couponId, router]);
 
   return (
     <form action={action} className="flex max-w-2xl flex-col gap-5">

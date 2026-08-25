@@ -74,16 +74,6 @@ export interface Banner {
   mobileAlt: string;
   mobileObjectPosition: string;
   tone: number;
-  /**
-   * Optional overlay copy — all opt-in. hero-section.tsx only renders the
-   * text block when `headline` is non-empty, so a banner with none of this
-   * filled in keeps today's exact text-free look.
-   */
-  badgeText?: string;
-  headline?: string;
-  subheading?: string;
-  offerBadgeText?: string;
-  /** Primary CTA. */
+  /** The whole banner image links here — defaults to /shop with "Shop Now" when unset. */
   link?: { label: string; href: string };
-  secondaryLink?: { label: string; href: string };
 }

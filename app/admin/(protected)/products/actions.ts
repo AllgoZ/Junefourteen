@@ -7,6 +7,11 @@ import {
   createProductForAdmin,
   updateProductForAdmin,
   setProductActive,
+  bulkSetProductActive,
+  getProductIdsWithOrders,
+  getProductNamesForIds,
+  getCloudinaryIdsForProducts,
+  bulkDeleteProducts,
   addProductImage,
   deleteProductImageRow,
   reorderProductImages,
@@ -121,6 +126,71 @@ export async function setProductActiveAction(formData: FormData): Promise<void> 
   await setProductActive(admin, id, isActive);
   revalidateTag("products", "max");
   revalidatePath("/admin/products");
+}
+
+export interface BulkActionResult {
+  error?: string;
+  activatedCount?: number;
+  deactivatedCount?: number;
+}
+
+export async function bulkSetProductActiveAction(ids: string[], isActive: boolean): Promise<BulkActionResult> {
+  await requireAdmin();
+  if (ids.length === 0) return { error: "No products selected." };
+
+  const admin = createAdminClient();
+  await bulkSetProductActive(admin, ids, isActive);
+
+  revalidateTag("products", "max");
+  revalidatePath("/admin/products");
+
+  return isActive ? { activatedCount: ids.length } : { deactivatedCount: ids.length };
+}
+
+export interface BulkDeleteResult {
+  error?: string;
+  deletedCount: number;
+  /** Names of products that had order history and were deactivated instead of deleted, never silently. */
+  deactivatedInstead: string[];
+}
+
+/**
+ * setProductActive's own comment is the reason this exists as a separate,
+ * narrower path rather than a plain bulk delete: a hard delete could orphan
+ * order_items' historical snapshot reference. This checks every selected
+ * product against real order history first — anything that's ever been
+ * ordered is deactivated instead of deleted, and that's reported back
+ * explicitly so it's never a silent surprise. Only products with zero order
+ * history are ever actually removed (row + cascaded children + Cloudinary
+ * images).
+ */
+export async function bulkDeleteProductsAction(ids: string[]): Promise<BulkDeleteResult> {
+  await requireAdmin();
+  if (ids.length === 0) return { deletedCount: 0, deactivatedInstead: [] };
+
+  const admin = createAdminClient();
+  const idsWithOrders = await getProductIdsWithOrders(admin, ids);
+  const deletableIds = ids.filter((id) => !idsWithOrders.has(id));
+  const mustDeactivateIds = ids.filter((id) => idsWithOrders.has(id));
+
+  const deactivatedInstead: string[] = [];
+  if (mustDeactivateIds.length > 0) {
+    const names = await getProductNamesForIds(admin, mustDeactivateIds);
+    deactivatedInstead.push(...names.map((n) => n.name));
+    await bulkSetProductActive(admin, mustDeactivateIds, false);
+  }
+
+  if (deletableIds.length > 0) {
+    const cloudinaryIds = await getCloudinaryIdsForProducts(admin, deletableIds);
+    await bulkDeleteProducts(admin, deletableIds);
+    await Promise.all(cloudinaryIds.map((publicId) => deleteImage(publicId).catch(() => {})));
+  }
+
+  revalidateTag("products", "max");
+  revalidateTag("collections", "max");
+  revalidatePath("/admin/products");
+
+  return { deletedCount: deletableIds.length, deactivatedInstead };
 }
 
 export interface ImageUploadState {

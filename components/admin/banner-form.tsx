@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +63,6 @@ export function BannerForm({ banner }: { banner?: AdminBannerRow }) {
   const [mobilePreviewSrc, setMobilePreviewSrc] = useState<string | undefined>(banner?.mobile_image_url ?? undefined);
   const [removeMobileImage, setRemoveMobileImage] = useState(false);
 
-  const [headline, setHeadline] = useState(banner?.headline ?? "");
   const [primaryCtaHref, setPrimaryCtaHref] = useState(banner?.primary_cta_href ?? "");
   const [sortOrder, setSortOrder] = useState(banner?.sort_order ?? 0);
   const [isActive, setIsActive] = useState(banner?.is_active ?? true);
@@ -72,16 +72,19 @@ export function BannerForm({ banner }: { banner?: AdminBannerRow }) {
   const effectiveMobileSrc = removeMobileImage ? undefined : (mobilePreviewSrc ?? desktopPreviewSrc);
 
   useEffect(() => {
-    if (state.bannerId && !banner) {
-      router.push(`/admin/banners/${state.bannerId}`);
+    if (state.bannerId) {
+      toast.success("Banner saved.");
+      router.push("/admin/banners");
     }
-  }, [state.bannerId, banner, router]);
+  }, [state.bannerId, router]);
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-[var(--shadow-subtle)]">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{headline.trim() || "Untitled Slide"}</p>
+          <p className="truncate text-sm font-medium text-foreground">
+            {banner?.desktop_image_alt.trim() || "Untitled Slide"}
+          </p>
           <p className="truncate text-xs text-muted-foreground">{primaryCtaHref.trim() || "No link set"}</p>
         </div>
         <div className="flex items-center gap-5">
@@ -111,47 +114,14 @@ export function BannerForm({ banner }: { banner?: AdminBannerRow }) {
         <input type="hidden" name="desktopObjectPosition" value={desktopObjectPosition} />
         <input type="hidden" name="mobileObjectPosition" value={mobileObjectPosition} />
 
-        <AdminCard title="Content">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="banner-badge">Badge Text</Label>
-              <Input id="banner-badge" name="badgeText" defaultValue={banner?.badge_text ?? ""} placeholder="New Collection 2026" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="banner-headline">
-                Headline <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="banner-headline"
-                name="headline"
-                required
-                value={headline}
-                onChange={(e) => setHeadline(e.target.value)}
-                placeholder="Comfort in Every Stitch."
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="banner-subheading">Subheading</Label>
-              <textarea
-                id="banner-subheading"
-                name="subheading"
-                defaultValue={banner?.subheading ?? ""}
-                rows={2}
-                placeholder="Timeless ethnic wear crafted for your little ones…"
-                className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              />
-            </div>
-          </div>
-        </AdminCard>
-
-        <AdminCard title="Primary CTA">
+        <AdminCard title="Link">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="banner-primary-cta-text">Primary CTA Text</Label>
+              <Label htmlFor="banner-primary-cta-text">Link Text</Label>
               <Input id="banner-primary-cta-text" name="primaryCtaText" defaultValue={banner?.primary_cta_text ?? ""} placeholder="Shop Now" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="banner-primary-cta-href">Primary CTA Link</Label>
+              <Label htmlFor="banner-primary-cta-href">Link URL</Label>
               <Input
                 id="banner-primary-cta-href"
                 name="primaryCtaHref"
@@ -161,7 +131,9 @@ export function BannerForm({ banner }: { banner?: AdminBannerRow }) {
               />
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Optional — leave blank to use the default Shop link.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Optional — leave blank to default to &quot;Shop Now&quot; → /shop. The whole banner image is clickable.
+          </p>
         </AdminCard>
 
         <AdminCard>
@@ -227,40 +199,6 @@ export function BannerForm({ banner }: { banner?: AdminBannerRow }) {
               ) : undefined
             }
           />
-        </AdminCard>
-
-        <AdminCard title="Secondary Button & Offer Badge">
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="banner-secondary-cta-text">Secondary CTA Text</Label>
-                <Input
-                  id="banner-secondary-cta-text"
-                  name="secondaryCtaText"
-                  defaultValue={banner?.secondary_cta_text ?? ""}
-                  placeholder="View Collections"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="banner-secondary-cta-href">Secondary CTA Link</Label>
-                <Input
-                  id="banner-secondary-cta-href"
-                  name="secondaryCtaHref"
-                  defaultValue={banner?.secondary_cta_href ?? ""}
-                  placeholder="/collections"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="banner-offer-badge">Offer Badge Text</Label>
-              <Input
-                id="banner-offer-badge"
-                name="offerBadgeText"
-                defaultValue={banner?.offer_badge_text ?? ""}
-                placeholder="₹300 OFF on orders above ₹2500"
-              />
-            </div>
-          </div>
         </AdminCard>
 
         {state.error && <p className="text-sm text-destructive">{state.error}</p>}

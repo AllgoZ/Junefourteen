@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useTransition } from "react";
+import { toast } from "sonner";
 import Image from "next/image";
 import { ArrowLeft, ArrowRight, X, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,28 @@ import type { AdminProductImage } from "@/lib/repositories/admin/products";
 
 const INITIAL_STATE: ImageUploadState = {};
 
-export function ProductImagesManager({ productId, images }: { productId: string; images: AdminProductImage[] }) {
+export function ProductImagesManager({
+  productId,
+  images,
+  onUploadingChange,
+}: {
+  productId: string;
+  images: AdminProductImage[];
+  onUploadingChange?: (uploading: boolean) => void;
+}) {
   const uploadAction = uploadProductImageAction.bind(null, productId);
   const [state, action, pending] = useActionState(uploadAction, INITIAL_STATE);
   const [isReordering, startReorder] = useTransition();
+  const wasPendingRef = useRef(false);
+
+  useEffect(() => {
+    onUploadingChange?.(pending);
+    if (wasPendingRef.current && !pending) {
+      if (state.error) toast.error(state.error);
+      else toast.success("Image uploaded.");
+    }
+    wasPendingRef.current = pending;
+  }, [pending, state.error, onUploadingChange]);
 
   function move(index: number, direction: -1 | 1) {
     const next = [...images];

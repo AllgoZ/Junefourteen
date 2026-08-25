@@ -70,11 +70,6 @@ export async function saveBannerAction(
   await requireAdmin();
 
   const id = String(formData.get("id") ?? "").trim() || undefined;
-  const headline = String(formData.get("headline") ?? "").trim();
-  if (!headline) {
-    return { error: "Headline is required." };
-  }
-
   const desktopObjectPosition = readPosition(formData, "desktopObjectPosition");
   const mobileObjectPosition = readPosition(formData, "mobileObjectPosition");
 
@@ -110,14 +105,14 @@ export async function saveBannerAction(
     mobileCloudinaryPublicId: mobile.publicId,
     mobileObjectPosition,
     tone: DEFAULT_TONE,
-    badgeText: orNull(formData, "badgeText"),
-    headline,
-    subheading: orNull(formData, "subheading"),
+    badgeText: null,
+    headline: "",
+    subheading: null,
     primaryCtaText: orNull(formData, "primaryCtaText"),
     primaryCtaHref: orNull(formData, "primaryCtaHref"),
-    secondaryCtaText: orNull(formData, "secondaryCtaText"),
-    secondaryCtaHref: orNull(formData, "secondaryCtaHref"),
-    offerBadgeText: orNull(formData, "offerBadgeText"),
+    secondaryCtaText: null,
+    secondaryCtaHref: null,
+    offerBadgeText: null,
     sortOrder: Number(formData.get("sortOrder") ?? 0) || 0,
     isActive: formData.get("isActive") === "on",
   };

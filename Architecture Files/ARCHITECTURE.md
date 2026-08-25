@@ -293,17 +293,19 @@ repo root — **and, since the backend build, also mirrored into Cloudinary**
 (`junefourteen/gallery/*`, deterministic `public_id` per file so re-running
 the seed script overwrites rather than duplicates). `product_images.image_url`
 in the database points at the Cloudinary delivery URL, not the local path;
-`public/images/` stays as the seed script's source and as the social grid's
-direct local references, which were never part of the product catalog and so
-were never migrated — see §18 for the image delivery pipeline (Cloudinary
-transformations, the custom `next/image` loader). Those local-path homepage
-images currently trip a harmless "loader missing width" dev-console warning
-under the global custom loader — not a functional bug (confirmed by direct
-visual/HTTP-status testing), noted as a follow-up in §21. The hero carousel
-is the one exception: it's now DB-backed (`banners` table, §17) with admin-
-uploaded Cloudinary images; `components/home/hero-section.tsx`'s
-`FALLBACK_BANNERS` (still pointing at local `GALLERY_IMAGES`) only renders
-when zero banners are active, so the homepage never shows an empty hero.
+`public/images/` stays as the seed script's source, which was never part of
+the product catalog and so was never migrated — see §18 for the image
+delivery pipeline (Cloudinary transformations, the custom `next/image`
+loader). Those local-path homepage images currently trip a harmless "loader
+missing width" dev-console warning under the global custom loader — not a
+functional bug (confirmed by direct visual/HTTP-status testing), noted as a
+follow-up in §21. The hero carousel, the "Shop Collection" campaign banner,
+and the "Follow Along" social grid are now all DB-backed the same way
+(`banners`/`homepage_campaign`/`homepage_gallery_images` tables, §14/§17)
+with admin-uploaded Cloudinary images; each one's hardcoded local-path
+version (`hero-section.tsx`'s `FALLBACK_BANNERS`, and the literal defaults in
+`app/(site)/page.tsx`/`social-section.tsx`) only renders when its table has
+zero rows, so the homepage never shows empty content.
 
 Two components implement the same "real photo if present, else
 placeholder" fallback **independently** (not sharing code — a known small
@@ -499,6 +501,18 @@ per-export, it throws at module evaluation. Hit when `lib/services/
 shipping.ts` gained a real DB read: three client components that only ever
 used its unrelated `INDIAN_STATES` constant broke. Full story and fix
 (a dedicated zero-dependency `lib/config/indian-states.ts`) in §16.
+
+### 9.17 A Server Action's request body is capped at 1MB by default
+Every image upload in the admin (banners, products, collections) goes
+through a Server Action carrying the file as `FormData` — any photo over
+~1MB (any real, non-tiny JPG/WebP) hits `Body exceeded 1 MB limit.` This
+isn't Cloudinary- or code-specific, it's a Next.js-wide default with no
+per-route override; the fix is `next.config.ts`'s
+`experimental.serverActions.bodySizeLimit` (still `experimental` in this
+exact Next 16.3.0 install per its own bundled docs — checked rather than
+assumed, since AGENTS.md warns this version's conventions can differ from
+training data), set to `"10mb"` here. Requires a dev-server restart to
+take effect — `next.config.ts` isn't hot-reloaded.
 
 ## 10. Design system (current baseline — see §12 for how it got here)
 
@@ -911,17 +925,19 @@ a few hundred products.
 
 ## 14. Database schema & RLS
 
-Eighteen tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
+Twenty tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
 triggers.sql`, `0003_rls.sql`, `0004_lockdown_internal.sql`, `0005_profile_
 email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0009_banner_mobile_image.sql`, `0010_banner_content_fields.sql`,
 `0011_order_tracking.sql`, `0012_order_payment_fields.sql`,
-`0013_shipping_coupons_tax.sql` — `0008`/`0011`/`0012` are plain `alter
-table` additions with no new table, `0009` renames `banners`' original
-image columns to `desktop_*` and adds a parallel optional `mobile_*` set,
-`0010` adds banners' optional overlay-copy columns, `0013` adds
-`shipping_zones`/`coupons`/`tax_settings` plus `orders.tax_amount`/
-`coupon_code`). One deliberate
+`0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql` — `0008`/`0011`/
+`0012` are plain `alter table` additions with no new table, `0009` renames
+`banners`' original image columns to `desktop_*` and adds a parallel optional
+`mobile_*` set, `0010` adds banners' optional overlay-copy columns, `0013`
+adds `shipping_zones`/`coupons`/`tax_settings` plus `orders.tax_amount`/
+`coupon_code`, `0014` adds `homepage_campaign`/`homepage_gallery_images` and
+seeds both with the exact values the homepage had hardcoded before). One
+deliberate
 deviation from the backend brief's suggested
 shape: **`product_collections` is a many-to-many join table**, not a single
 `collection_id` FK on `products` — the mock data has products in multiple
@@ -941,6 +957,8 @@ and `everyday-edit`), which a single FK can't represent.
 | `shipping_zones` | Admin-managed replacement for the old static rate table (`0013`) — `name`, `states text[]`, `rate`, `free_shipping_threshold` (nullable), `eta_min_days`/`eta_max_days`, `is_default` (the catch-all for any state not listed in another zone — enforced in the admin action, not a DB constraint, same as `addresses.is_default`), `sort_order`, `is_active`. RLS-enabled with **no policies** (default-deny) — only ever read/written via the service-role client (§16/§17), same reasoning as `orders`. Real hard delete (§17), same reasoning as `banners`. |
 | `coupons` | `0013` — `code` (unique, stored uppercase), `discount_type` (`percentage`/`fixed`), `discount_value`, `min_order_amount`, `max_discount_amount` (nullable, caps a percentage discount), `starts_at`/`expires_at` (nullable), `usage_limit` (nullable = unlimited), `times_used`, `is_active`. Same RLS-locked-down, service-role-only, hard-delete shape as `shipping_zones`. Validated fresh on every checkout attempt (`lib/services/coupons.ts#validateCoupon`, never cached) — re-validated server-side inside `createOrderAction` regardless of what the client's earlier "Apply" preview said (§16). |
 | `tax_settings` | `0013` — a **singleton row** (`id boolean primary key default true check (id)`, the standard Postgres one-row-table trick; the migration inserts that one row itself). `rate_percent`, `label`, `is_active` — one global rate, off by default. |
+| `homepage_campaign` | `0014` — another **singleton row**, same trick as `tax_settings`. Backs the full-bleed "Shop Collection" banner between the Best Sellers scroll showcase and the Follow Along grid on the homepage: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, plus `link_label`/`link_href` for its single clickable CTA. Seeded with the exact values that were previously hardcoded in `app/(site)/page.tsx`. RLS-enabled with no policies (service-role client only), same as `tax_settings`/`shipping_zones`. |
+| `homepage_gallery_images` | `0014` — the four photos in the "Follow Along" Instagram-style grid: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, `sort_order`, `is_active`. Seeded with the same four `GALLERY_IMAGES` paths and `TILE_TONES` values `social-section.tsx` used to hardcode. Each tile is edited independently in the admin (no add/remove/reorder UI — the storefront grid layout assumes a fixed set), same RLS-locked-down shape as `shipping_zones`. |
 | `schema_migrations` | Migration-runner bookkeeping (§20), not app data — RLS-locked to deny-all via PostgREST (`0004`), reachable only by direct Postgres connection or the service-role client. |
 
 **RLS philosophy** (all policies in `0003_rls.sql`): public `SELECT` on
@@ -1204,31 +1222,50 @@ a handful of parallel aggregate queries, `lib/repositories/admin/
 dashboard.ts`), `/admin/products` (+ `new`/`[id]` — full CRUD, search,
 Cloudinary multi-image upload/reorder/delete, soft-delete via `is_active`
 only, never a hard delete since `order_items.product_id` can reference a
-product), `/admin/collections` (+ `new`/`[id]`, single-image variant of the
-same pattern), `/admin/banners` (+ `new`/`[id]` — reshaped after user
-feedback to match a richer CMS reference: a header card (title derived from
-`headline`, falling back to "Untitled Slide"; a big switch-style `Active`
-toggle; a `Position` number input) sits above the actual `<form>`, then
-`AdminCard`s for Content (`badge_text`/`headline` [required]/`subheading`),
-Primary CTA (`primary_cta_text`/`primary_cta_href`), Desktop/Laptop Image,
-Mobile Image, and Secondary Button & Offer Badge
-(`secondary_cta_text`/`secondary_cta_href`/`offer_badge_text`). All overlay-
-copy fields are optional except headline and are opt-in on the storefront —
-see the hero-section.tsx note below. Each image section is
-`components/admin/banner-image-field.tsx`, used once per breakpoint with
-entirely separate field names/state (this was a real bug fixed in this
-pass: earlier the mobile preview's fallback-to-desktop-image logic made it
-*look* like picking a mobile image affected the desktop one, even though
-the underlying state was already independent) — a drag-and-drop dropzone
-with a "paste a URL instead" toggle (pasted URLs are stored as-is with a
-null `cloudinary_public_id`, so `deleteImage` is never called on an asset
-this app doesn't own), alt text, crop-focus sliders, and a live preview,
-all together in one place rather than scattered across separate cards. A
-"Remove" checkbox on the mobile image reverts a banner to laptop-image-only.
-Banners also get a genuine **hard delete** (`deleteBannerForAdmin` +
-`deleteBannerAction`, with a `confirm()` guard in the form) — unlike
-products/collections, nothing else references a banner row, so the usual
-soft-delete-only convention doesn't apply here.
+product — see below for the one deliberate, narrowly-scoped exception.
+`product-images-manager.tsx`'s upload form reports its own `pending` state
+up to `product-form.tsx` via an `onUploadingChange` callback, which
+disables the main "Save Product" button (plus an inline "Image uploading —
+please wait" note) for the duration — the images manager is a sibling
+`<form>`, not nested (§17 note above about why), so without this the main
+form had no way to know an upload was in flight. Every entity form in this
+admin (`product-form.tsx`, `collection-form.tsx`, `banner-form.tsx`,
+`shipping-zone-form.tsx`, `coupon-form.tsx`) fires a `sonner` success toast
+and navigates back to that entity's **list** page on a successful save —
+create and update alike — rather than the old create-only "redirect to the
+new item's own edit page, do nothing on update" behavior),
+`/admin/collections` (+ `new`/`[id]`, single-image variant of the
+same pattern), `/admin/banners` (+ `new`/`[id]` — briefly grew a richer
+"Content"/"Secondary Button & Offer Badge" CMS system (badge/headline
+[required]/subheading/secondary CTA/offer badge) modeled on an external
+reference the user shared, then was reverted after that same required
+`headline` turned out to silently block saving a plain image banner (the
+form always returned `"Headline is required."`, so **zero** banners had
+ever actually made it into the table — confirmed by querying it directly
+before this fix). The lesson: match a reference's structure, not its
+required-field assumptions, without confirming they fit how *this* admin
+is actually used. Current shape: a header card (title from
+`desktop_image_alt`, a big switch-style `Active` toggle, a `Position`
+number input) above the form, then `AdminCard`s for Link
+(`primary_cta_text`/`primary_cta_href`, both optional — text defaults to
+"Shop Now" if only a URL is set, see `dbBannerToBanner`), Desktop/Laptop
+Image, and Mobile Image — nothing else is admin-settable per banner
+anymore. `badge_text`/`headline`/`subheading`/`secondary_cta_*`/
+`offer_badge_text` stay as unused, always-`null`/`""` columns (no
+migration to drop them — cheap to leave, avoids a destructive schema
+change) — `types/product.ts`'s `Banner` app type, `lib/mappers/banner.ts`,
+and `lib/repositories/banners.ts`'s select list were all trimmed to match,
+so nothing in the app actually reads them anymore either. Each image
+section is `components/admin/banner-image-field.tsx`, used once per
+breakpoint with entirely separate field names/state (a drag-and-drop
+dropzone with a "paste a URL instead" toggle — pasted URLs are stored
+as-is with a null `cloudinary_public_id`, so `deleteImage` is never called
+on an asset this app doesn't own — alt text, crop-focus sliders, and a
+live preview). A "Remove" checkbox on the mobile image reverts a banner to
+laptop-image-only. Banners also get a genuine **hard delete**
+(`deleteBannerForAdmin` + `deleteBannerAction`, with a `confirm()` guard in
+the form) — unlike products/collections, nothing else references a banner
+row, so the usual soft-delete-only convention doesn't apply here.
 
 The list page also has `components/admin/banner-bulk-upload.tsx`: **two
 independent** `<input type="file" multiple>` pickers — "Laptop Images" and
@@ -1250,19 +1287,19 @@ file — both are derived from the same reference-viewport numbers so they
 can't silently disagree with each other the way they did in an earlier pass
 (preview frame at one arbitrary ratio, copy suggesting a different one).
 
-On the storefront, `hero-section.tsx` renders an optional bottom-left text
-block (badge, headline, subheading, primary + secondary CTA buttons, offer
-badge text) only when a banner's `headline` is non-empty — a banner with no
-headline renders exactly like the original text-free hero (bottom-right
-link + dots only), and the bottom-right link is dropped once a headline is
-present since the primary CTA button already covers that. This keeps every
-banner created before this feature looking unchanged. Separately, both
-breakpoint images render for every slide simultaneously, toggling which one
-is visible via `sm:hidden`/`hidden sm:block` rather than swapping `src` in
-JS — next/image's
-lazy-loading (based on layout size) then never fetches the hidden one,
-except on the first slide, which forces `priority` on both variants since
-SSR can't know the visitor's breakpoint ahead of time), `/admin/inventory` (bulk
+On the storefront, `hero-section.tsx` is text-free except for one small
+bottom-right link — always rendered, unconditionally, reading
+`banner.link` (`label` defaults to "Shop Now", `href` to `/shop`) — plus
+the pagination dots. Each slide's image pair is also wrapped in its own
+`<Link>` to that same href, so the *entire* visible photo is clickable,
+not just the small text corner (a native `<a>` inside the horizontal
+scroll-snap track already distinguishes a drag/swipe from a tap, so this
+doesn't interfere with the swipeable carousel). Both breakpoint images
+render for every slide simultaneously, toggling which one is visible via
+`sm:hidden`/`hidden sm:block` rather than swapping `src` in JS — next/
+image's lazy-loading (based on layout size) then never fetches the hidden
+one, except on the first slide, which forces `priority` on both variants
+since SSR can't know the visitor's breakpoint ahead of time), `/admin/inventory` (bulk
 per-product stock table — thumbnail/name/category/inline-editable stock
 quantity/computed `StockStatusBadge`, `StatCard` summary row, search + a
 low-stock/out-of-stock filter select mirroring the Orders status filter;
@@ -1294,6 +1331,39 @@ reinsert convention since there's no per-row identity worth preserving for a
 handful of footer links edited as one list, and now a `TaxSettingsForm`
 card — rate/label/active toggle over the `tax_settings` singleton row, no
 new nav entry the same way Social Links didn't get one, §16).
+
+`/admin/collections` also carries two homepage-media cards above its
+existing collections table — `CampaignBannerForm` (image + alt + link
+label/href over the `homepage_campaign` singleton, §14) and
+`GalleryImagesForm` (four independent per-tile upload forms, each its own
+`useActionState` mirroring `product-images-manager.tsx`'s per-image save
+pattern, over the four `homepage_gallery_images` rows). Placed here rather
+than on a new route or under Settings by explicit request; neither card
+touches the collections CRUD table/actions on the same page.
+
+**Bulk product selection** (`components/admin/products-table.tsx`, a
+Client Component the Server Component list page hands its already-fetched
+rows to). A header checkbox (indeterminate when some-but-not-all rows are
+picked, via a ref since that state has no HTML attribute) plus a per-row
+checkbox drive a `Set<string>` of selected ids; a bulk-action bar appears
+above the table once anything's selected (`Activate`/`Deactivate`/`Delete`/
+`Clear`, `useTransition` + `router.refresh()` after each — this component
+holds server-fetched data in local state, so a `revalidatePath` alone
+doesn't repaint it). `Deactivate` is `bulkSetProductActive` (§14, a single
+`update ... where id in (...)`, not N round trips) — no new risk, same
+soft-delete the per-row button already did. `Delete` is the one place a
+product row can be genuinely removed, and it exists specifically *because*
+of the "never a hard delete" rule above, not despite it:
+`bulkDeleteProductsAction` checks every selected id against real
+`order_items` history (`getProductIdsWithOrders`) first — anything that's
+ever been ordered is deactivated instead, and that's always reported back
+by name in the confirmation toast, never silently substituted. Only
+products with zero order history are actually deleted (row + cascaded
+`product_images`/`product_sizes`/`product_sleeve_options`/
+`product_collections` + their Cloudinary assets). Verified directly
+against the database with a throwaway pair of products — one with a real
+`order_items` row, one without — confirming the ordered one survives
+(deactivated) and the unordered one is actually gone, cascade included.
 
 Storefront consumers of the two new tables fall back to hardcoded defaults
 when empty, so an unconfigured store never regresses: `hero-section.tsx`'s
@@ -1356,9 +1426,10 @@ Non-Cloudinary sources (the handful of homepage sections still using local
 Classic Next model, not Cache Components (§9.11). `lib/services/products.ts`
 wraps its two base fetchers (`listActiveProducts`→mapped, `listActiveCollections`
 →mapped) in `unstable_cache` tagged `"products"`/`"collections"`,
-`revalidate: 3600`; `lib/services/banners.ts`/`social-links.ts` follow the
-identical pattern, tagged `"banners"`/`"social-links"` — every banner/social-
-link admin mutation calls the matching `revalidateTag(tag, "max")`.
+`revalidate: 3600`; `lib/services/banners.ts`/`social-links.ts`/`homepage.ts`
+follow the identical pattern, tagged `"banners"`/`"social-links"`/
+`"homepage-campaign"`/`"homepage-gallery-images"` — every banner/social-link/
+homepage-media admin mutation calls the matching `revalidateTag(tag, "max")`.
 `getProductBySlug`/`getCollectionBySlug` additionally tag
 their own entry (`product:<slug>`/`collection:<slug>`) via a wrapper created
 per call (the key array stays static, the slug is passed as the cached

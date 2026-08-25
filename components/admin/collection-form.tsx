@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import Image from "next/image";
 import { ImagePlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -19,10 +20,11 @@ export function CollectionForm({ collection }: { collection?: AdminCollectionRow
   const [state, action, pending] = useActionState(saveCollectionAction, INITIAL_STATE);
 
   useEffect(() => {
-    if (state.collectionId && !collection) {
-      router.push(`/admin/collections/${state.collectionId}`);
+    if (state.collectionId) {
+      toast.success("Collection saved.");
+      router.push("/admin/collections");
     }
-  }, [state.collectionId, collection, router]);
+  }, [state.collectionId, router]);
 
   return (
     <form action={action} className="flex max-w-2xl flex-col gap-5">

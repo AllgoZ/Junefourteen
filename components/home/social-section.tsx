@@ -3,13 +3,22 @@ import { Container } from "@/components/layout/container";
 import { GALLERY_IMAGES } from "@/lib/mock-data/gallery-images";
 import { site } from "@/lib/config/site";
 import { getSocialLinks } from "@/lib/services/social-links";
+import { getGalleryImages } from "@/lib/services/homepage";
 
 const TILE_TONES = [0.15, 0.38, 0.6, 0.82];
 
 export async function SocialSection() {
-  const dbSocialLinks = await getSocialLinks();
+  const [dbSocialLinks, dbGalleryImages] = await Promise.all([getSocialLinks(), getGalleryImages()]);
   const socialLinks = dbSocialLinks.length > 0 ? dbSocialLinks : site.social;
   const instagram = socialLinks.find((s) => s.label === "Instagram")?.href ?? socialLinks[0].href;
+  const galleryImages =
+    dbGalleryImages.length > 0
+      ? dbGalleryImages
+      : TILE_TONES.map((tone, i) => ({
+          imageUrl: GALLERY_IMAGES[i % GALLERY_IMAGES.length],
+          imageAlt: `${site.name} on Instagram`,
+          tone,
+        }));
 
   return (
     <section className="py-14 sm:py-20">
@@ -20,7 +29,7 @@ export async function SocialSection() {
         </p>
       </Container>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {TILE_TONES.map((tone, i) => (
+        {galleryImages.map((image, i) => (
           <a
             key={i}
             href={instagram}
@@ -29,10 +38,10 @@ export async function SocialSection() {
             className="block transition-opacity hover:opacity-80"
           >
             <EditorialImage
-              src={GALLERY_IMAGES[i % GALLERY_IMAGES.length]}
-              tone={tone}
+              src={image.imageUrl}
+              tone={image.tone}
               aspect="square"
-              alt={`${site.name} on Instagram`}
+              alt={image.imageAlt}
               decorative
               sizes="(min-width: 640px) 25vw, 50vw"
             />

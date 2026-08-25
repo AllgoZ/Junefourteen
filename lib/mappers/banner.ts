@@ -11,17 +11,8 @@ export function dbBannerToBanner(row: BannerRow): Banner {
     mobileAlt: row.mobile_image_alt || row.desktop_image_alt,
     mobileObjectPosition: row.mobile_object_position,
     tone: row.tone,
-    badgeText: row.badge_text ?? undefined,
-    headline: row.headline || undefined,
-    subheading: row.subheading ?? undefined,
-    offerBadgeText: row.offer_badge_text ?? undefined,
-    link:
-      row.primary_cta_href && row.primary_cta_text
-        ? { label: row.primary_cta_text, href: row.primary_cta_href }
-        : undefined,
-    secondaryLink:
-      row.secondary_cta_href && row.secondary_cta_text
-        ? { label: row.secondary_cta_text, href: row.secondary_cta_href }
-        : undefined,
+    // Text is optional even when a URL is set — default it to "Shop Now"
+    // rather than silently dropping the admin's link entirely.
+    link: row.primary_cta_href ? { href: row.primary_cta_href, label: row.primary_cta_text || "Shop Now" } : undefined,
   };
 }
