@@ -47,7 +47,7 @@ export function ProductCard({ product, priority, className, dark = false }: Prod
 
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
           {product.isSoldOut ? (
-            <span className="rounded-full bg-gradient-to-b from-white/95 to-white/70 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-destructive uppercase shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-sm">
+            <span className="rounded-sm bg-background/45 px-1.5 py-0.5 text-[10px] font-medium tracking-[0.14em] text-destructive uppercase">
               Sold Out
             </span>
           ) : product.isNew ? (
@@ -77,12 +77,7 @@ export function ProductCard({ product, priority, className, dark = false }: Prod
         <h3 className={cn("text-xs", dark ? "text-warm-white/80" : "text-muted-foreground")}>
           {product.name}
         </h3>
-        <Price
-          price={product.price}
-          compareAtPrice={product.compareAtPrice}
-          dark={dark}
-          showCompareAtPrice={false}
-        />
+        <Price price={product.price} compareAtPrice={product.compareAtPrice} dark={dark} />
       </Link>
     </div>
   );

@@ -9,12 +9,16 @@ import {
 import { site } from "@/lib/config/site";
 import { getSocialLinks } from "@/lib/services/social-links";
 
-/** lucide-react dropped brand/logo glyphs, so social links use a short monogram instead of an icon. */
-const SOCIAL_MONOGRAMS: Record<string, string> = {
-  Instagram: "IG",
-  Pinterest: "P",
-  Facebook: "FB",
-};
+/** lucide-react dropped brand/logo glyphs — inline monochrome glyph instead, colored via currentColor like every other icon here. */
+function InstagramGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 const FOOTER_COLUMNS = [
   { title: "Shop", links: site.footer.shop },
@@ -41,7 +45,11 @@ export async function SiteFooter() {
   const dbSocialLinks = await getSocialLinks();
   // Fall back to the hardcoded defaults until the admin has added any —
   // matches the same "never render empty" pattern as the hero banners.
-  const socialLinks = dbSocialLinks.length > 0 ? dbSocialLinks : site.social;
+  // Instagram only in the footer, by design — filtered even if an admin
+  // later adds more rows via Settings.
+  const socialLinks = (dbSocialLinks.length > 0 ? dbSocialLinks : site.social).filter(
+    (s) => s.label === "Instagram"
+  );
 
   return (
     <footer className="border-t border-border bg-offwhite">
@@ -91,9 +99,9 @@ export async function SiteFooter() {
                 target="_blank"
                 rel="noreferrer"
                 aria-label={s.label}
-                className="flex size-9 items-center justify-center rounded-full border border-border text-[11px] font-medium tracking-wide text-foreground transition-colors hover:bg-muted"
+                className="flex size-9 items-center justify-center rounded-full border border-border text-foreground transition-colors hover:bg-muted"
               >
-                {SOCIAL_MONOGRAMS[s.label] ?? s.label[0]}
+                <InstagramGlyph />
               </a>
             ))}
           </div>

@@ -534,6 +534,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["homepage_gallery_images"]["Insert"]>;
         Relationships: [];
       };
+      about_page_content: {
+        Row: {
+          id: boolean;
+          hero_image_url: string;
+          hero_cloudinary_public_id: string | null;
+          hero_image_alt: string;
+          heading: string;
+          intro_body: string;
+          story_eyebrow: string;
+          story_title: string;
+          story_body: string;
+          story_image_url: string;
+          story_cloudinary_public_id: string | null;
+          story_image_alt: string;
+          philosophy_eyebrow: string;
+          philosophy_title: string;
+          philosophy_body: string;
+          philosophy_image_url: string;
+          philosophy_cloudinary_public_id: string | null;
+          philosophy_image_alt: string;
+          journal_eyebrow: string;
+          journal_title: string;
+          journal_body: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          hero_image_url: string;
+          hero_cloudinary_public_id?: string | null;
+          hero_image_alt?: string;
+          heading?: string;
+          intro_body?: string;
+          story_eyebrow?: string;
+          story_title?: string;
+          story_body?: string;
+          story_image_url: string;
+          story_cloudinary_public_id?: string | null;
+          story_image_alt?: string;
+          philosophy_eyebrow?: string;
+          philosophy_title?: string;
+          philosophy_body?: string;
+          philosophy_image_url: string;
+          philosophy_cloudinary_public_id?: string | null;
+          philosophy_image_alt?: string;
+          journal_eyebrow?: string;
+          journal_title?: string;
+          journal_body?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["about_page_content"]["Insert"]>;
+        Relationships: [];
+      };
+      rate_limit_hits: {
+        Row: { id: number; key: string; created_at: string };
+        Insert: { id?: number; key: string; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["rate_limit_hits"]["Insert"]>;
+        Relationships: [];
+      };
       schema_migrations: {
         Row: { filename: string; applied_at: string };
         Insert: { filename: string; applied_at?: string };

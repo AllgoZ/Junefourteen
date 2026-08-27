@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,17 +68,23 @@ export function GuestDataFields() {
   );
 }
 
+/**
+ * No router.push/refresh here: signIn/signUp already run from this exact
+ * route (/account), and both call a Supabase Auth method that sets the
+ * session cookie via cookies().set() (lib/supabase/server.ts) — per Next's
+ * Server Action model, a cookie mutation inside the action automatically
+ * re-renders the invoking route and ships the fresh RSC payload in the
+ * same response useActionState already consumes. A push (to the identical
+ * current URL) + refresh() here was a fully redundant second round trip,
+ * doubling the wait between clicking "Sign In" and seeing the account view.
+ */
 function useAuthSuccessSync(state: AuthFormState) {
-  const router = useRouter();
-
   useEffect(() => {
     if (!state.success) return;
     setIsAuthed(true);
     setCartItemsLocally(state.success.cart);
     setWishlistItemsLocally(state.success.wishlist);
-    router.push("/account");
-    router.refresh();
-  }, [state.success, router]);
+  }, [state.success]);
 }
 
 function SignInForm() {

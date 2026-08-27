@@ -14,6 +14,7 @@ import {
   type BannerFormInput,
 } from "@/lib/repositories/admin/banners";
 import { uploadImage, deleteImage } from "@/lib/cloudinary/admin";
+import { validateImageFile } from "@/lib/cloudinary/validate-image";
 
 export interface BannerFormState {
   error?: string;
@@ -32,6 +33,9 @@ function orNull(formData: FormData, field: string): string | null {
   return value || null;
 }
 
+/** Thrown by resolveImage on a failed upload validation — caught in saveBannerAction to surface the specific message instead of a generic save error. */
+class ImageValidationError extends Error {}
+
 /**
  * Resolves one image slot from a save: an uploaded file wins (goes to
  * Cloudinary, replacing any prior Cloudinary asset), otherwise a manually
@@ -49,6 +53,8 @@ async function resolveImage(
   const file = formData.get(fileField);
   if (file instanceof File && file.size > 0) {
     const buffer = Buffer.from(await file.arrayBuffer());
+    const validation = validateImageFile(file, buffer);
+    if (!validation.valid) throw new ImageValidationError(validation.error);
     const uploaded = await uploadImage(buffer, folder);
     if (current.publicId) await deleteImage(current.publicId).catch(() => {});
     return { url: uploaded.url, publicId: uploaded.publicId };
@@ -83,16 +89,22 @@ export async function saveBannerAction(
     mobile = { url: existing?.mobile_image_url ?? null, publicId: existing?.mobile_cloudinary_public_id ?? null };
   }
 
-  desktop = await resolveImage(formData, "desktopImage", "desktopImageUrlInput", "banners/desktop", desktop);
-  if (!desktop.url) {
-    return { error: "A banner needs a laptop image." };
+  try {
+    desktop = await resolveImage(formData, "desktopImage", "desktopImageUrlInput", "banners/desktop", desktop);
+
+    if (formData.get("removeMobileImage") === "on" && !(formData.get("mobileImage") instanceof File && (formData.get("mobileImage") as File).size > 0)) {
+      if (mobile.publicId) await deleteImage(mobile.publicId).catch(() => {});
+      mobile = { url: null, publicId: null };
+    } else {
+      mobile = await resolveImage(formData, "mobileImage", "mobileImageUrlInput", "banners/mobile", mobile);
+    }
+  } catch (err) {
+    if (err instanceof ImageValidationError) return { error: err.message };
+    throw err;
   }
 
-  if (formData.get("removeMobileImage") === "on" && !(formData.get("mobileImage") instanceof File && (formData.get("mobileImage") as File).size > 0)) {
-    if (mobile.publicId) await deleteImage(mobile.publicId).catch(() => {});
-    mobile = { url: null, publicId: null };
-  } else {
-    mobile = await resolveImage(formData, "mobileImage", "mobileImageUrlInput", "banners/mobile", mobile);
+  if (!desktop.url) {
+    return { error: "A banner needs a laptop image." };
   }
 
   const input: BannerFormInput = {
@@ -169,6 +181,8 @@ export async function bulkCreateBannersAction(
   try {
     for (let i = 0; i < desktopFiles.length; i++) {
       const desktopBuffer = Buffer.from(await desktopFiles[i].arrayBuffer());
+      const desktopValidation = validateImageFile(desktopFiles[i], desktopBuffer);
+      if (!desktopValidation.valid) throw new ImageValidationError(desktopValidation.error);
       const desktopUploaded = await uploadImage(desktopBuffer, "banners/desktop");
 
       let mobileImageUrl: string | null = null;
@@ -176,6 +190,8 @@ export async function bulkCreateBannersAction(
       const mobileFile = mobileFiles[i];
       if (mobileFile) {
         const mobileBuffer = Buffer.from(await mobileFile.arrayBuffer());
+        const mobileValidation = validateImageFile(mobileFile, mobileBuffer);
+        if (!mobileValidation.valid) throw new ImageValidationError(mobileValidation.error);
         const mobileUploaded = await uploadImage(mobileBuffer, "banners/mobile");
         mobileImageUrl = mobileUploaded.url;
         mobileCloudinaryPublicId = mobileUploaded.publicId;
@@ -212,7 +228,8 @@ export async function bulkCreateBannersAction(
       createdCount: desktopFiles.length,
       unusedMobileCount: unusedMobileCount > 0 ? unusedMobileCount : undefined,
     };
-  } catch {
+  } catch (err) {
+    if (err instanceof ImageValidationError) return { error: err.message };
     return {
       error: "Something went wrong partway through. Check the list below — any banners already created can be edited or removed individually.",
     };

@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validateSignIn, validateSignUp, validateMobile, normalizePhone, hasAuthErrors } from "@/lib/validation";
 import { mergeGuestCart } from "@/lib/services/cart";
 import { mergeGuestWishlist } from "@/lib/services/wishlist";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { CartItem, WishlistItem } from "@/types/cart";
 
 export interface AuthFormState {
@@ -49,6 +50,14 @@ export async function signIn(_prevState: AuthFormState, formData: FormData): Pro
   const errors = validateSignIn({ email, password });
   if (hasAuthErrors(errors)) return { errors };
 
+  const ip = await getClientIp();
+  const tooManyAttempts =
+    !(await checkRateLimit("sign-in-ip", ip, { max: 20, windowSeconds: 600 })).allowed ||
+    !(await checkRateLimit("sign-in-account", `${ip}:${email.toLowerCase()}`, { max: 8, windowSeconds: 600 })).allowed;
+  if (tooManyAttempts) {
+    return { errors: { form: "Too many sign-in attempts. Please wait a few minutes and try again." } };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
@@ -68,6 +77,11 @@ export async function signUp(_prevState: AuthFormState, formData: FormData): Pro
 
   const errors = validateSignUp({ fullName, email, password });
   if (hasAuthErrors(errors)) return { errors };
+
+  const ip = await getClientIp();
+  if (!(await checkRateLimit("sign-up-ip", ip, { max: 5, windowSeconds: 3600 })).allowed) {
+    return { errors: { form: "Too many attempts — please wait a while and try again." } };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({

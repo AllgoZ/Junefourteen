@@ -17,6 +17,7 @@ import {
   updateHomepageGalleryImage,
 } from "@/lib/repositories/admin/homepage";
 import { uploadImage, deleteImage } from "@/lib/cloudinary/admin";
+import { validateImageFile } from "@/lib/cloudinary/validate-image";
 
 export interface CollectionFormState {
   error?: string;
@@ -62,6 +63,8 @@ export async function saveCollectionAction(
   const file = formData.get("image");
   if (file instanceof File && file.size > 0) {
     const buffer = Buffer.from(await file.arrayBuffer());
+    const validation = validateImageFile(file, buffer);
+    if (!validation.valid) return { error: validation.error };
     const uploaded = await uploadImage(buffer, "collections");
     if (cloudinaryPublicId) await deleteImage(cloudinaryPublicId).catch(() => {});
     imageUrl = uploaded.url;
@@ -130,6 +133,8 @@ export async function saveHomepageCampaignAction(
   const file = formData.get("image");
   if (file instanceof File && file.size > 0) {
     const buffer = Buffer.from(await file.arrayBuffer());
+    const validation = validateImageFile(file, buffer);
+    if (!validation.valid) return { error: validation.error };
     const uploaded = await uploadImage(buffer, "homepage");
     if (cloudinaryPublicId) await deleteImage(cloudinaryPublicId).catch(() => {});
     imageUrl = uploaded.url;
@@ -176,6 +181,8 @@ export async function saveHomepageGalleryImageAction(
   const file = formData.get("image");
   if (file instanceof File && file.size > 0) {
     const buffer = Buffer.from(await file.arrayBuffer());
+    const validation = validateImageFile(file, buffer);
+    if (!validation.valid) return { error: validation.error };
     const uploaded = await uploadImage(buffer, "homepage");
     if (cloudinaryPublicId) await deleteImage(cloudinaryPublicId).catch(() => {});
     imageUrl = uploaded.url;

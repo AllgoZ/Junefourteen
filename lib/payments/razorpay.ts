@@ -52,3 +52,25 @@ export function verifyRazorpaySignature(orderId: string, paymentId: string, sign
   if (expectedBuffer.length !== actualBuffer.length) return false;
   return timingSafeEqual(expectedBuffer, actualBuffer);
 }
+
+/**
+ * Webhook signature check — a separate scheme from verifyRazorpaySignature
+ * above (different secret, different payload shape): Razorpay signs the
+ * **raw webhook request body** with a dashboard-configured webhook secret
+ * (RAZORPAY_WEBHOOK_SECRET, distinct from RAZORPAY_KEY_SECRET), not the
+ * "<order_id>|<payment_id>" string Checkout's client-side callback signs.
+ * Callers must pass the untouched raw body text (before any JSON.parse) —
+ * the signature is computed over exact bytes, so re-serializing the parsed
+ * JSON would silently break verification on the slightest formatting diff.
+ */
+export function verifyRazorpayWebhookSignature(rawBody: string, signature: string): boolean {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret || !signature) return false;
+
+  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+
+  const expectedBuffer = Buffer.from(expected, "hex");
+  const actualBuffer = Buffer.from(signature, "hex");
+  if (expectedBuffer.length !== actualBuffer.length) return false;
+  return timingSafeEqual(expectedBuffer, actualBuffer);
+}

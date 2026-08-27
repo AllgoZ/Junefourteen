@@ -6,6 +6,20 @@ immediately — what it is, how it's built, where things live, why key decisions
 were made, and what's outstanding. When you make a significant architectural
 change, update this file in the same session.
 
+**Sibling documents** (same `Architecture Files/` folder) — this file stays
+the hub; these are focused deep-dives, cross-linked both ways:
+
+- **`FRONTEND.md`** — practical frontend conventions: design tokens, core
+  reusable components, state management, the forms/Server-Actions pattern,
+  and frontend-specific gotchas. Start here before writing UI code.
+- **`SECURITY.md`** — an authentication/authorization/payment/data-handling
+  security audit, with a prioritized findings table.
+- **`OPTIMIZATION.md`** — a caching/rendering/image/font/query performance
+  audit, with a prioritized findings table.
+- **`ADMIN_CMS_AUDIT.md`** — admin feature-parity backlog vs. Shopify Admin
+  (partially stale as of this writing — written before shipping/coupons/tax
+  shipped, §17 below is the accurate current state for those).
+
 ---
 
 ## 1. What this is
@@ -157,7 +171,9 @@ lib/
   services/                 Same exported function names as before the backend build (getProducts(),
                              getProductBySlug(), etc. — see §13) plus new auth.ts/admin-auth.ts/cart.ts/
                              wishlist.ts/addresses.ts Server Actions
-  shipping/rate-table.ts     Mock shipping rates, extracted from services/shipping.ts (still mock — §21)
+  shipping/rate-table.ts     International rate + the fallback constants used only when the admin
+                             hasn't configured any `shipping_zones` rows (§16) — domestic rates are
+                             now admin-managed, not mock, per zone
   supabase/                  client.ts (browser), server.ts (cookie-bound, RLS-as-user), admin.ts
                              (service-role, server-only), anon.ts (no cookies, for cacheable public
                               reads), types.ts (hand-written Database type, §13)
@@ -586,7 +602,11 @@ take effect — `next.config.ts` isn't hot-reloaded.
   flipping solid after a few px of scroll). Solidifies to the standard
   `bg-background/90 backdrop-blur-md` treatment on scroll, exactly like every
   other route always has. Every non-home route's header is byte-identical to
-  before.
+  before. (A same-day variant that hid the header entirely — no icons, no
+  logo, nothing — over the hero was tried and reverted per direct feedback:
+  the icons/logo should stay visible, overlaid transparently on the hero
+  photo exactly as they always have; only the *solid bar* is scroll-gated,
+  not the header's presence. Don't reintroduce the fully-hidden version.)
 
 - **Collections** (`components/home/featured-collections.tsx`) — the
   homepage section is titled just "Collections" (not "Featured Collections"),
@@ -620,15 +640,24 @@ take effect — `next.config.ts` isn't hot-reloaded.
   a competitor site) — see §12 step 10 for the full diagnosis.
 
 - **Product cards** (`components/product/product-card.tsx`): quiet
-  `text-xs text-muted-foreground` name text (not `text-sm text-foreground`),
-  no strike-through `compareAtPrice` on grid cards (`Price`'s
-  `showCompareAtPrice` prop, default `true`, set `false` only from
-  `ProductCard` — PDP and cart line items still show it, that's where the
-  discount context matters). Badge slot (top-left) is priority-ordered:
-  `isSoldOut` → a small pill badge (`rounded-full`, white/gradient
-  background, `text-destructive` red text, soft shadow) takes over the slot
-  entirely; else `isNew` → plain white "New" text; else `compareAtPrice` →
-  plain white "Sale" text. The overlay wishlist heart (`WishlistButton`'s
+  `text-xs text-muted-foreground` name text (not `text-sm text-foreground`).
+  Strike-through `compareAtPrice` **does** show on grid cards, parallel to
+  the current price (`Price`'s `showCompareAtPrice` prop, default `true` —
+  `ProductCard` used to override it to `false`; per direct feedback it no
+  longer does, so grid cards now render identically to PDP/cart on this
+  point — one shared component, no divergent behavior to maintain). Badge
+  slot (top-left) is priority-ordered: `isSoldOut` → red (`text-destructive`)
+  "Sold Out" text on a small, deliberately subtle `bg-background/45`
+  chip (`rounded-sm`, no blur, no shadow) — sized and toned specifically to
+  not compete with the product photo, replacing an earlier fully
+  transparent (no background at all) version and, before that, a heavier
+  glassmorphic white/gradient pill with `backdrop-blur-sm` — both changes
+  came from direct feedback, don't reintroduce either. The top dark
+  gradient scrim (`from-black/30`) used for `isNew`/`compareAtPrice`
+  legibility is *not* shown for `isSoldOut` — its own chip background
+  already provides contrast, and stacking both would undercut "subtle."
+  Else `isNew` → plain white "New" text; else `compareAtPrice` → plain
+  white "Sale" text. The overlay wishlist heart (`WishlistButton`'s
   `overlay` variant, used only from `ProductCard`) has no background circle —
   bare heart icon with a small drop-shadow for legibility over any photo; the
   PDP's `detail` variant (bordered square button) is untouched. Images use
@@ -925,16 +954,18 @@ a few hundred products.
 
 ## 14. Database schema & RLS
 
-Twenty tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
+Twenty-three tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
 triggers.sql`, `0003_rls.sql`, `0004_lockdown_internal.sql`, `0005_profile_
 email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0009_banner_mobile_image.sql`, `0010_banner_content_fields.sql`,
 `0011_order_tracking.sql`, `0012_order_payment_fields.sql`,
-`0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql` — `0008`/`0011`/
-`0012` are plain `alter table` additions with no new table, `0009` renames
-`banners`' original image columns to `desktop_*` and adds a parallel optional
-`mobile_*` set, `0010` adds banners' optional overlay-copy columns, `0013`
-adds `shipping_zones`/`coupons`/`tax_settings` plus `orders.tax_amount`/
+`0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql`,
+`0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`
+— `0008`/`0011`/`0012` are plain `alter table` additions with no new table,
+`0009` renames `banners`' original image columns to `desktop_*` and adds a
+parallel optional `mobile_*` set, `0010` adds banners' optional
+overlay-copy columns, `0013` adds `shipping_zones`/`coupons`/`tax_settings`
+plus `orders.tax_amount`/
 `coupon_code`, `0014` adds `homepage_campaign`/`homepage_gallery_images` and
 seeds both with the exact values the homepage had hardcoded before). One
 deliberate
@@ -959,6 +990,8 @@ and `everyday-edit`), which a single FK can't represent.
 | `tax_settings` | `0013` — a **singleton row** (`id boolean primary key default true check (id)`, the standard Postgres one-row-table trick; the migration inserts that one row itself). `rate_percent`, `label`, `is_active` — one global rate, off by default. |
 | `homepage_campaign` | `0014` — another **singleton row**, same trick as `tax_settings`. Backs the full-bleed "Shop Collection" banner between the Best Sellers scroll showcase and the Follow Along grid on the homepage: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, plus `link_label`/`link_href` for its single clickable CTA. Seeded with the exact values that were previously hardcoded in `app/(site)/page.tsx`. RLS-enabled with no policies (service-role client only), same as `tax_settings`/`shipping_zones`. |
 | `homepage_gallery_images` | `0014` — the four photos in the "Follow Along" Instagram-style grid: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, `sort_order`, `is_active`. Seeded with the same four `GALLERY_IMAGES` paths and `TILE_TONES` values `social-section.tsx` used to hardcode. Each tile is edited independently in the admin (no add/remove/reorder UI — the storefront grid layout assumes a fixed set), same RLS-locked-down shape as `shipping_zones`. |
+| `rate_limit_hits` | `0015` — backs `lib/rate-limit.ts`'s Postgres-based fixed-window limiter (§22): `key` (a `"bucket:identifier"` string) + `created_at`. Rows are short-lived (opportunistic cleanup inside the limiter itself, no cron); chosen over in-memory/Redis specifically because no process here can hold a counter safely across serverless instances. Same RLS-locked-down, service-role-only shape as `shipping_zones`. |
+| `about_page_content` | `0016` — another **singleton row**. Backs every text field and the three images (`hero_*`/`story_*`/`philosophy_*`, plus `journal_*` text with no image) on `/about`, editable from `/admin/about` (§17). Seeded with the exact copy `app/(site)/about/page.tsx` had hardcoded before — verified via direct query to match byte-for-byte. Same RLS-locked-down shape as `tax_settings`/`homepage_campaign`. |
 | `schema_migrations` | Migration-runner bookkeeping (§20), not app data — RLS-locked to deny-all via PostgREST (`0004`), reachable only by direct Postgres connection or the service-role client. |
 
 **RLS philosophy** (all policies in `0003_rls.sql`): public `SELECT` on
@@ -1341,6 +1374,15 @@ pattern, over the four `homepage_gallery_images` rows). Placed here rather
 than on a new route or under Settings by explicit request; neither card
 touches the collections CRUD table/actions on the same page.
 
+`/admin/about` (new `AdminNav` sidebar entry, `BookOpen` icon) — full
+content editing for the public `/about` page over the `about_page_content`
+singleton (§14): every heading/body paragraph plus the hero/story/
+philosophy images, one form (`AboutPageForm`), `AdminCard`-per-section
+matching `/admin/settings`'s layout convention. Its three image uploads go
+through `validateImageFile` (`lib/cloudinary/validate-image.ts`, §22) —
+the current security baseline from day one, since this is a new upload
+surface added after that hardening pass, not one that predates it.
+
 **Bulk product selection** (`components/admin/products-table.tsx`, a
 Client Component the Server Component list page hands its already-fetched
 rows to). A header checkbox (indeterminate when some-but-not-all rows are
@@ -1426,10 +1468,11 @@ Non-Cloudinary sources (the handful of homepage sections still using local
 Classic Next model, not Cache Components (§9.11). `lib/services/products.ts`
 wraps its two base fetchers (`listActiveProducts`→mapped, `listActiveCollections`
 →mapped) in `unstable_cache` tagged `"products"`/`"collections"`,
-`revalidate: 3600`; `lib/services/banners.ts`/`social-links.ts`/`homepage.ts`
+`revalidate: 3600`; `lib/services/banners.ts`/`social-links.ts`/`homepage.ts`/`about.ts`
 follow the identical pattern, tagged `"banners"`/`"social-links"`/
-`"homepage-campaign"`/`"homepage-gallery-images"` — every banner/social-link/
-homepage-media admin mutation calls the matching `revalidateTag(tag, "max")`.
+`"homepage-campaign"`/`"homepage-gallery-images"`/`"about-page"` — every
+banner/social-link/homepage-media/about-page admin mutation calls the
+matching `revalidateTag(tag, "max")`.
 `getProductBySlug`/`getCollectionBySlug` additionally tag
 their own entry (`product:<slug>`/`collection:<slug>`) via a wrapper created
 per call (the key array stays static, the slug is passed as the cached
@@ -1503,36 +1546,230 @@ Cloudinary accounts, not something to do unprompted.
 
 ## 21. Explicitly out of scope
 
-**Implemented in the backend build (§13–§20), no longer out of scope**:
+**Implemented since the original brief, no longer out of scope**:
 Supabase/database, real auth (customer + admin), admin panel, real order
-persistence.
+persistence, **Razorpay payment integration including webhook
+reconciliation** (§16/§22 — client-reported success is HMAC-verified
+server-side before an order is ever marked paid, now backed by a second,
+authoritative webhook confirmation path independent of the browser; see
+`SECURITY.md` §3 for the audit of this flow), **admin-managed shipping
+zones/coupons/tax** (§14/§17 — replaced the old hardcoded rate table/no-tax/
+no-discount behavior; `lib/shipping/rate-table.ts` now only supplies the
+international rate and the fallback used when zero zones are configured),
+**production hardening** (§22 — security headers/CSP, rate limiting, image
+upload validation, the React Compiler).
 
-**Still explicitly out of scope**, same as the original brief:
+**Still genuinely out of scope**:
 
-- **No payment gateway.** Orders are created with `payment_status: "pending"`
-  always — nothing in this codebase ever marks an order paid. Checkout's
-  "Payment integration coming soon" placeholder is unchanged. Integrating one
-  is a change confined to `app/(site)/checkout/actions.ts#createOrderAction`
-  (call the provider after order creation, update `payment_status` from its
-  webhook/callback) — it doesn't need to touch the schema (`payment_status`
-  already supports `paid`/`failed`/`refunded`, §14) or the checkout UI beyond
-  that.
-- **No real shipping-provider API.** `lib/services/shipping.ts` still returns
-  mock rates from `lib/shipping/rate-table.ts` — real integration replaces
-  that module's contents, not its call sites (checkout and the account
-  address flow).
-- **Minor**: a handful of homepage sections (hero, social grid) reference
-  `public/images/*.webp` directly rather than through the Supabase-backed
-  catalog, since they were never part of product/collection data — this
-  produces a harmless "loader missing width" dev-console warning under the
-  global custom Cloudinary loader (§18); confirmed non-functional via direct
+- **No real shipping-*carrier* API** (Shiprocket/Delhivery/etc.) — rates are
+  admin-configured flat zones (§14), not live-quoted from a carrier, and
+  there's no label generation/pickup scheduling. Real carrier integration
+  would replace `lib/services/shipping.ts`'s implementation, not its call
+  sites (checkout and the account address flow).
+- **Minor**: a handful of homepage sections reference `public/images/*.webp`
+  directly as their zero-rows fallback (hero, campaign banner, social grid —
+  §8) rather than through the Supabase-backed catalog. This produces a
+  harmless "loader missing width" dev-console warning under the global
+  custom Cloudinary loader (§18); confirmed non-functional via direct
   testing, not yet silenced.
 - **No cross-tab/cross-device realtime sync** for cart/wishlist — an
   authenticated user's cart updates via Server Action + reconciliation
   (§16), not a live subscription; a second open tab won't see a change made
   in the first until it refetches.
+- **SEO** (sitemap, robots, metadata strategy) — explicitly out of scope for
+  the §22 hardening pass per its own brief; still open, to be handled
+  separately.
+- See `SECURITY.md`'s findings table and `OPTIMIZATION.md`'s findings table
+  for anything not listed here — both were re-checked as part of §22 and
+  now mark each finding's actual status rather than leaving it open-ended.
 
 The repository/mapper/service layering (§13) exists specifically so any of
 these can be added later without UI rewrites — that work replaces the bodies
 of `lib/services/*.ts` functions (or adds new repository/mapper files), not
 their call sites.
+
+## 22. Production hardening pass (reliability, security, performance)
+
+Driven by `prompt files/hardening.md` — a brief explicitly declaring the
+UI/UX and database schema **locked** ("preserve the existing application
+exactly as a product... audit first, verify every assumption, then make
+only justified, production-safe improvements") and asking for the same
+`SECURITY.md`/`OPTIMIZATION.md` findings from the prior session's audit to
+actually get fixed, plus a specific root-cause investigation of perceived
+sign-in/navigation slowness. SEO was explicitly out of scope. Every change
+below is additive or narrowly-scoped — no component was redesigned, no
+existing table/column/route changed, no existing functionality removed.
+
+**Sign-in/navigation latency** — root-caused, not guessed (full trace in
+`OPTIMIZATION.md` §8): `app/(site)/account/loading.tsx` (new) gives instant
+feedback on cold navigation to `/account`, which previously had no loading
+boundary at all despite being fully dynamic. Separately,
+`components/account/auth-forms.tsx`'s post-sign-in `router.push("/account")`
++ `router.refresh()` was a confirmed redundant second round-trip — Next's
+own documented Server Action model already re-renders the invoking route
+in the same response when the action mutates a cookie (which
+`signInWithPassword` does, via `lib/supabase/server.ts`'s `cookies().set()`
+adapter), so both calls were removed; the local cart/wishlist/auth-flag
+sync in the same effect is untouched.
+
+**Razorpay webhook reconciliation** (`SECURITY.md`'s prior #1 finding) —
+`app/api/webhooks/razorpay/route.ts` (new Route Handler) is a second,
+authoritative payment-confirmation path alongside the existing
+browser-side `verifyRazorpayPaymentAction` (untouched). Verifies
+`x-razorpay-signature` (HMAC-SHA256 over the **raw** request body) against
+a new `RAZORPAY_WEBHOOK_SECRET` env var — a separate secret and payload
+scheme from `lib/payments/razorpay.ts#verifyRazorpaySignature`'s
+Checkout-callback check, added as a sibling function
+(`verifyRazorpayWebhookSignature`) rather than a modification of it. Looks
+the order up by `razorpay_order_id` (new index,
+`orders_razorpay_order_id_idx` — `orders` had none, and this is the only
+column a webhook payload can look up by, since it never carries this app's
+own order id), and only calls the existing `markOrderPaid` if
+`payment_status` isn't already `"paid"` — idempotent against Razorpay's own
+webhook retries and safe if it races the client-side path. Unrecognized
+event types and not-found orders return `200` (no point making Razorpay
+retry either case); a genuine DB error returns `500` so Razorpay *does*
+retry. `.env.example` documents the new var and where to configure it
+(Razorpay Dashboard → Settings → Webhooks, subscribed to `payment.captured`
+and `order.paid`).
+
+**Security response headers & CSP** (`SECURITY.md`'s prior #2 finding) —
+`next.config.ts#headers()` (new), applied to every route. Content-Security-
+Policy built from an audit of every actual external resource this app
+loads (not a generic template): Supabase (`connect-src`), Cloudinary
+(`img-src`, plus `data:`/`blob:` for the admin's live-upload-preview
+components), Razorpay Checkout as a `*.razorpay.com` wildcard across
+`script-src`/`connect-src`/`frame-src` (Razorpay uses different subdomains
+per payment method — UPI/cards/netbanking/wallets — so an exact-hostname
+list risked silently breaking some of them), and `'self'`-only fonts since
+they're self-hosted via `next/font/google` (zero runtime Google Fonts
+request, confirmed in `OPTIMIZATION.md` §3). `style-src` includes
+`'unsafe-inline'` — required by the existing (locked) image-crop components
+that set `style={{ objectPosition }}`, and inline *style* isn't the XSS
+vector `script-src` exists to close, so this is a deliberate, low-risk
+allowance rather than an oversight. Dev-only additions (`'unsafe-eval'`,
+the HMR websocket) are gated behind `NODE_ENV`. Also sets
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy` (denies camera/mic/geolocation — unused by this app),
+and `Strict-Transport-Security`.
+
+**Regression, caught and fixed the same day**: the first version of this
+CSP omitted `'unsafe-inline'` from `script-src`, which broke every route
+backed by a `loading.tsx` (`/shop`, `/product/[slug]`,
+`/collections/[slug]`) — they got stuck showing their skeleton forever.
+Root cause (confirmed against Next's own bundled CSP guide,
+`node_modules/next/dist/docs/.../content-security-policy.md`, and directly
+against this app's real HTML output): Next inlines its hydration/RSC-
+streaming payload as `<script>` tags with no `src=` (confirmed present on
+a real product page, e.g. `<script id="_R_">`) — a `script-src` without
+either `'unsafe-inline'` or a per-request nonce silently blocks those in
+the browser, so the script that swaps the `loading.tsx` fallback for the
+resolved content never runs. The reason this wasn't caught before shipping:
+validation at the time was `curl`-based (status codes + raw HTML content
+checks), and streamed RSC content is present in the raw response body
+**regardless of whether a browser's CSP would block the accompanying
+script** — `curl` doesn't enforce CSP or execute JS, so it structurally
+cannot observe this failure mode. Fixed by adding `'unsafe-inline'` to
+`script-src`, matching Next's own documented "Without Nonces" CSP pattern
+exactly (its official example includes it for precisely this reason). The
+documented alternative — a per-request nonce generated in `proxy.ts` — was
+deliberately not used instead: it requires forcing **every** page to
+dynamic rendering and disables ISR/static generation sitewide, which would
+be a far worse regression for an app that relies on static/ISR throughout
+(§19). `'unsafe-inline'` on `script-src` does narrow CSP's protection
+(it now also permits any inline script, not just Next's own) — accepted
+specifically because `SECURITY.md` §4 already confirms no
+`dangerouslySetInnerHTML`/injection point exists in this codebase for an
+inline-script XSS to exploit; the CSP still blocks the other main class of
+attack it exists for (loading an entire script from an attacker-controlled
+external origin). Verified live: confirmed the corrected header via
+`curl -D -`, confirmed a real product page's raw response actually
+contains unnonced inline `<script>` tags (so the fix is addressing a
+mechanism proven present, not a hypothetical one), and re-ran the full
+`tsc`/`lint`/`build` cycle clean. **Caveat carried forward from §22's
+original write-up still applies**: no browser-automation tool exists in
+this environment, so — as with the sign-in fix — there was no way to
+directly observe the before/after in an actual rendering browser; this
+conclusion rests on matching Next's own documented failure mode exactly
+plus confirming the inline scripts are genuinely present in this app's
+output, not a live click-through. If anything at `/shop`, `/product/*`, or
+`/collections/*` still shows only a skeleton after this fix, that is new
+information this reasoning didn't account for and needs its own fresh
+audit, not an assumption that the same fix needs to be "tried harder."
+
+**File upload hardening** (`SECURITY.md`'s prior #4 finding) —
+`lib/cloudinary/validate-image.ts` (new): an explicit MIME allowlist, a
+magic-byte sniff of the actual buffer (JPEG/PNG/GIF/WebP signatures — not
+the client-reported, spoofable `file.type` alone), and an 8MB ceiling
+independent of the global 10MB Server Action body cap. Called from every
+image-upload Server Action (`banners`, `collections`, `products`,
+`homepage_campaign`/`homepage_gallery_images`) right after the existing
+`file instanceof File && file.size > 0` check — no change to any upload
+UI/flow. Verified directly: the signature check correctly accepts a real
+`.webp` file from `public/images/` and rejects HTML/shell-script bytes
+disguised with an image extension.
+
+**Rate limiting** (`SECURITY.md`'s prior #3 finding) —
+`lib/rate-limit.ts` (new), Postgres-backed (`rate_limit_hits` table,
+`0015_razorpay_webhook_and_rate_limits.sql`) rather than in-memory or a new
+external service: this app has no single long-lived process to hold an
+in-memory counter safely across serverless instances, and Postgres is
+already reachable everywhere via the admin client, so this adds zero new
+infrastructure. `checkRateLimit(bucket, identifier, {max, windowSeconds})`
+counts recent hits for a `bucket:identifier` key and fails **open** on its
+own DB errors (never turns infra trouble into a checkout/sign-in outage).
+Applied to `signIn` (by IP, and by IP+email composite so a shared-IP/NAT
+user isn't penalized for a different account's attempts), `signUp`,
+`applyCouponAction`, and `createOrderAction` — all in
+`lib/services/auth.ts`/`app/(site)/checkout/actions.ts`, returning through
+each action's existing `{error}` shape (no new UI). Verified directly
+against the live table: a 5-call sequence with `max: 3` allowed exactly the
+first three and denied the rest.
+
+**React Compiler** (`OPTIMIZATION.md`'s prior #1 finding) — enabled.
+`babel-plugin-react-compiler` installed as a devDependency; `next.config.ts`
+sets `reactCompiler: true` — confirmed via this exact Next 16.3.0 install's
+bundled docs (`node_modules/next/dist/docs/.../reactCompiler.md`) that it's
+a **top-level** config key in this version, not `experimental.reactCompiler`
+(the older convention `OPTIMIZATION.md` had originally assumed — corrected
+there too). The codebase already enforced the compiler's lint rules as
+build errors, so this was expected to be low-risk; `tsc --noEmit`,
+`npm run lint`, and `npm run build` all stayed clean with it on, with no
+compiler diagnostics surfaced.
+
+**Bundle/code-splitting** — re-measured, not just re-asserted. Turbopack's
+production chunk filenames are content-hashed with no module attribution,
+and this project has no bundle-analyzer tooling; adding one just for a
+one-time measurement would itself be the kind of speculative addition the
+brief warned against. No dynamic-import change was made — see
+`OPTIMIZATION.md` §6 for the full reasoning and the two components that
+would be the first candidates if analyzer evidence ever justifies one.
+
+**Query/index review** — the one new, justified index is
+`orders_razorpay_order_id_idx` (added because the new webhook handler
+genuinely needs it, not speculatively). `select("*")` in a couple of tiny
+admin repositories was evaluated again and deliberately left as-is — see
+`OPTIMIZATION.md` §5 for why narrowing it isn't worth the maintenance cost
+on tables this small. Every `unstable_cache` tag was re-confirmed to still
+have a matching `revalidateTag` call after this pass's edits — none of
+those edits touched a cached read path.
+
+**Validation**: `npx tsc --noEmit`, `npm run lint`, and `npm run build` all
+clean with every change above active simultaneously. `npm audit` re-run
+after installing the one new dependency: still 0 vulnerabilities. Migration
+`0015_razorpay_webhook_and_rate_limits.sql` applied and its index/table
+existence confirmed via a direct Postgres query (`pg_indexes`). Live
+dev-server smoke test: homepage/`/checkout`/`/admin/login` all render real
+content under the new CSP; the webhook route rejects unsigned/invalid-
+signature requests with `400` and non-POST methods with `405`; the webhook
+and image-signature crypto/validation logic were verified in isolation
+against real inputs (a genuine HMAC, a real `.webp` product photo, and
+deliberately malformed/hostile inputs for each). One caveat, stated
+plainly rather than glossed over: there is no browser-automation tool in
+this environment, so the sign-in fix's conclusion rests on precise
+doc-grounded code tracing (quoted above) rather than an observed
+before/after Network-tab trace — a manual click-through is worth doing to
+visually confirm, and a real Razorpay test-mode webhook delivery (once
+`RAZORPAY_WEBHOOK_SECRET` is configured in the dashboard) is the way to
+exercise the webhook's happy path end-to-end, which wasn't possible here
+without that secret existing yet.

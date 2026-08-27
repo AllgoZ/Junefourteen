@@ -6,12 +6,10 @@ export const site = {
   url: "https://www.junefourteen.example",
   currency: "INR",
   currencySymbol: "₹",
-  contactEmail: "hello@junefourteen.example",
-  contactPhone: "+91 98765 43210",
+  contactEmail: "team.Junefourteen@gmail.com",
+  contactPhone: "+91 95979 82714",
   social: [
-    { label: "Instagram", href: "https://instagram.com" },
-    { label: "Pinterest", href: "https://pinterest.com" },
-    { label: "Facebook", href: "https://facebook.com" },
+    { label: "Instagram", href: "https://www.instagram.com/junefourteen.in?igsi=a25sZHZ3bnltMGE2" },
   ],
   nav: {
     primary: [

@@ -18,6 +18,7 @@ import {
   type ProductFormInput,
 } from "@/lib/repositories/admin/products";
 import { uploadImage, deleteImage } from "@/lib/cloudinary/admin";
+import { validateImageFile } from "@/lib/cloudinary/validate-image";
 
 export interface ProductFormState {
   error?: string;
@@ -210,6 +211,9 @@ export async function uploadProductImageAction(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  const validation = validateImageFile(file, buffer);
+  if (!validation.valid) return { error: validation.error };
+
   const uploaded = await uploadImage(buffer, `products/${productId}`);
 
   const admin = createAdminClient();

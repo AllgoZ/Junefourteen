@@ -11,6 +11,7 @@ import { listAddressesForUser, createAddressForUser } from "@/lib/repositories/a
 import { createRazorpayOrder, verifyRazorpaySignature } from "@/lib/payments/razorpay";
 import { getActiveTaxRate } from "@/lib/services/tax";
 import { validateCoupon, recordCouponUsage } from "@/lib/services/coupons";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { CartItem } from "@/types/cart";
 import type { ShippingEstimateInput, ShippingEstimateResult } from "@/types/shipping";
 
@@ -31,6 +32,11 @@ export interface ApplyCouponResult {
 
 /** Preview only — createOrderAction re-validates from scratch and is the only call that actually counts. */
 export async function applyCouponAction(code: string, subtotal: number): Promise<ApplyCouponResult> {
+  const ip = await getClientIp();
+  if (!(await checkRateLimit("coupon-apply", ip, { max: 20, windowSeconds: 600 })).allowed) {
+    return { error: "Too many attempts. Please wait a few minutes and try again." };
+  }
+
   const result = await validateCoupon(code, subtotal);
   if (!result.valid) return { error: result.error };
   return { discountAmount: result.discountAmount, code: result.code };
@@ -77,6 +83,12 @@ export async function createOrderAction(
   if (cartItems.length === 0) {
     return { error: "Your bag is empty." };
   }
+
+  const ip = await getClientIp();
+  if (!(await checkRateLimit("order-create", ip, { max: 10, windowSeconds: 600 })).allowed) {
+    return { error: "Too many attempts. Please wait a few minutes and try again." };
+  }
+
   if (
     !address.email ||
     !address.fullName ||
