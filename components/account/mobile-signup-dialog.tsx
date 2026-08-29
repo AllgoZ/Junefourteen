@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { GuestDataFields } from "@/components/account/auth-forms";
-import { signUpWithMobile, type MobileAuthFormState } from "@/lib/services/auth";
+import { signInOrSignUpWithMobile, type MobileAuthFormState } from "@/lib/services/auth";
 import { setCartItemsLocally } from "@/components/providers/cart-provider";
 import { setWishlistItemsLocally } from "@/components/providers/wishlist-provider";
 import { setIsAuthed } from "@/lib/auth/client-auth-store";
@@ -25,15 +25,16 @@ interface MobileSignupDialogProps {
 }
 
 /**
- * The add-to-bag/buy-now popup — quick account creation with just a mobile
- * number (see lib/services/auth.ts's signUpWithMobile for why there's no
- * OTP/password). Purely additive: the caller's own add-to-cart/checkout flow
- * always proceeds regardless of what happens here (dismissing via the
- * dialog's built-in close button changes nothing) — this only ever shows
- * for guests in the first place, see add-to-bag-panel.tsx.
+ * The add-to-bag/buy-now popup — quick account access with just a mobile
+ * number, no OTP/password either signing up or signing back in (see
+ * lib/services/auth.ts's signInOrSignUpWithMobile). Purely additive: the
+ * caller's own add-to-cart/checkout flow always proceeds regardless of
+ * what happens here (dismissing via the dialog's built-in close button
+ * changes nothing) — this only ever shows for guests in the first place,
+ * see add-to-bag-panel.tsx.
  */
 export function MobileSignupDialog({ open, onOpenChange }: MobileSignupDialogProps) {
-  const [state, action, pending] = useActionState(signUpWithMobile, INITIAL_STATE);
+  const [state, action, pending] = useActionState(signInOrSignUpWithMobile, INITIAL_STATE);
   const inputId = useId();
 
   useEffect(() => {
@@ -48,9 +49,10 @@ export function MobileSignupDialog({ open, onOpenChange }: MobileSignupDialogPro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create your account</DialogTitle>
+          <DialogTitle>Sign in or create an account</DialogTitle>
           <DialogDescription>
-            Just your mobile number — no password, no OTP. You can keep shopping either way.
+            Just your mobile number — no password, no OTP. Already have an account? We&rsquo;ll
+            sign you right in. You can keep shopping either way.
           </DialogDescription>
         </DialogHeader>
         <form action={action} className="flex flex-col gap-4">
@@ -70,7 +72,7 @@ export function MobileSignupDialog({ open, onOpenChange }: MobileSignupDialogPro
           </div>
           {state.errors?.form && <p className="text-xs text-destructive">{state.errors.form}</p>}
           <Button type="submit" disabled={pending}>
-            {pending ? "Creating account…" : "Create Account"}
+            {pending ? "Continuing…" : "Continue"}
           </Button>
         </form>
       </DialogContent>

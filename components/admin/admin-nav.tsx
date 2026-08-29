@@ -14,6 +14,7 @@ import {
   Truck,
   Ticket,
   BookOpen,
+  FileText,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const LINKS = [
   { href: "/admin/shipping", label: "Shipping", icon: Truck },
   { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/customers", label: "Customers", icon: Users },
+  { href: "/admin/legal", label: "Legal Pages", icon: FileText },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
 

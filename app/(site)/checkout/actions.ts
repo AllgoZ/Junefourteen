@@ -212,9 +212,15 @@ export async function createOrderAction(
       razorpayKeyId: process.env.RAZORPAY_KEY_ID,
       amount: razorpayOrder.amount,
     };
-  } catch {
+  } catch (err) {
     // The order row already exists (status "pending") — an admin can see it
-    // and the customer can be told to retry; nothing to roll back.
+    // and the customer can be told to retry; nothing to roll back. Logged
+    // server-side (never in the client-facing error) so a real cause —
+    // e.g. Razorpay's own API rejecting the key_id/key_secret pair with a
+    // 401, which this exact catch block was previously swallowing
+    // silently — is diagnosable from server logs instead of requiring a
+    // one-off script to re-discover it.
+    console.error("createOrderAction: Razorpay order creation failed", err);
     return { error: "Could not start payment. Please try again." };
   }
 }

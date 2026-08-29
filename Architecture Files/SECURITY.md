@@ -57,14 +57,23 @@ dropped — see their sections below for why).
   (a direct API call) is still bounded by Supabase's own policy, not
   unguarded. Reasonable for the current scale; MFA would be the next step up
   if this grows past a small storefront.
-- **Mobile-number quick signup** (`components/account/mobile-signup-dialog.tsx`,
+- **Mobile-number quick signup and sign-in** (`components/account/
+  mobile-signup-dialog.tsx`, `lib/services/auth.ts#signInOrSignUpWithMobile`,
   `lib/validation.ts#validateMobile`) accepts a phone number with **no
-  OTP/ownership verification** — explicitly a documented v1 tradeoff in the
-  code's own comment, not an oversight. Practical impact: an account can be
-  created against a phone number the signer-upper doesn't own. Low severity
-  today because nothing security-sensitive is gated on phone ownership
-  (no SMS-based recovery flow exists to abuse), but flag this before adding
-  one.
+  OTP/ownership verification**, in either direction — explicitly a
+  documented tradeoff in the code's own comments, not an oversight.
+  Originally only account *creation* worked this way; a same-day follow-up
+  made returning-customer *sign-in* symmetric (rotate the account's
+  password via the admin API, sign in with the fresh one — the old copy
+  told a returning customer to "sign in from your account page," which was
+  actually a dead end, since that form needs an email/password this flow
+  never gives them). Practical impact: anyone who knows a phone number
+  with an account — not just its actual owner — can both create *and sign
+  into* an account under that number. Low severity today because nothing
+  else security-sensitive is gated on phone ownership (no SMS-based
+  recovery flow exists to abuse), but flag this before adding one, and
+  don't let it quietly become the identifier for anything higher-stakes
+  without adding real verification first.
 
 ## 2. Authorization
 
@@ -234,8 +243,14 @@ self-hosted fonts) rather than a generic template. **`script-src` includes
 `'unsafe-inline'`** — required by Next's own documented non-nonce CSP
 pattern, since Next inlines its hydration/RSC-streaming payload as
 `<script>` tags; omitting it caused a same-day regression (every
-`loading.tsx`-backed route got stuck on its skeleton) caught and fixed —
-see `ARCHITECTURE.md` §22 for the full incident writeup.
+`loading.tsx`-backed route got stuck on its skeleton) caught and fixed.
+**`frame-src` is wide open (`*`)** — a scoped `*.razorpay.com` value broke
+every card payment at the 3D Secure/OTP step, since that iframe is hosted
+on the card-issuing bank's own (unenumerable) domain, never Razorpay's;
+`frame-src *` for this exact reason is standard practice for a merchant
+CSP in front of a card gateway. `frame-ancestors` is the separate,
+still-fully-enforced protection against this site itself being framed —
+unaffected. See `ARCHITECTURE.md` §22 for both incidents' full writeups.
 
 ## 8. Rate limiting
 

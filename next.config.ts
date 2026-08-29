@@ -52,7 +52,22 @@ function buildCsp(): string {
       "https://*.razorpay.com",
       ...(isDev ? ["ws://localhost:*", "http://localhost:*"] : []),
     ],
-    "frame-src": ["https://*.razorpay.com"],
+    // Wide open, deliberately: for a card payment, Razorpay opens a 3D
+    // Secure/OTP verification iframe hosted by the card's *issuing bank*
+    // (its ACS — Access Control Server — domain), not a razorpay.com one.
+    // Which bank's domain that is depends on the customer's own card and
+    // is unknowable/unenumerable ahead of time — hundreds of Indian banks
+    // alone, each with their own ACS host, plus international card
+    // networks. `frame-src *` for exactly this reason is Razorpay's own
+    // recommended practice for merchant CSPs (confirmed against payment-
+    // industry guidance, not guessed) — restricting it to `*.razorpay.com`
+    // broke every card payment at the OTP step: the order was created
+    // successfully (that part never touches Razorpay), then the bank's
+    // verification iframe silently failed to load, so the payment could
+    // never complete. `frame-ancestors` above is the unrelated, still-
+    // fully-enforced protection against *this site* being framed by
+    // someone else — loosening frame-src doesn't touch that.
+    "frame-src": ["*"],
     "frame-ancestors": ["'self'"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],

@@ -189,6 +189,82 @@ export async function signUpWithMobile(
   return mergeAndRespond(formData);
 }
 
+/**
+ * Signs a returning mobile-only customer back in without ever asking for
+ * the (random, never-shown) password `signUpWithMobile` generated for
+ * them — rotates it to a fresh one via the admin API (no old password
+ * needed) and signs in with that, same mechanism signup itself uses.
+ *
+ * Security note, matching the tradeoff `signUpWithMobile`'s own comment
+ * already documents for account *creation*: this proves nothing about who
+ * is submitting the number, so anyone who knows a phone number with an
+ * account can sign into it — no OTP/password check either direction. That
+ * was already the accepted v1 posture for creating an account under any
+ * number; this makes it symmetric for signing back in, per direct
+ * request, rather than leaving returning customers with no working path
+ * at all (the old copy pointed them at /account, which requires an
+ * email/password this flow never gives them — a dead end, not a
+ * workaround).
+ */
+async function signInExistingMobileAccount(userId: string, formData: FormData): Promise<MobileAuthFormState> {
+  const admin = createAdminClient();
+  const password = crypto.randomUUID();
+
+  const { data, error: updateError } = await admin.auth.admin.updateUserById(userId, { password });
+  if (updateError || !data.user.email) {
+    return { errors: { form: "Could not sign you in. Please try again." } };
+  }
+
+  const supabase = await createClient();
+  const { error: signInError } = await supabase.auth.signInWithPassword({ email: data.user.email, password });
+  if (signInError) {
+    return { errors: { form: "Could not sign you in. Please try again." } };
+  }
+
+  // Same reasoning as signUpWithMobile's own revalidatePath calls — this
+  // runs from wherever the Add to Bag/Buy Now popup lives, not /account.
+  revalidatePath("/account");
+  revalidatePath("/checkout");
+
+  return mergeAndRespond(formData);
+}
+
+/**
+ * What the mobile signup dialog actually binds to: tries the existing
+ * number first and signs in if it's already registered
+ * (signInExistingMobileAccount above), otherwise falls through to
+ * signUpWithMobile's normal account-creation flow — one form, one button,
+ * correct either way, no separate "already have an account?" step.
+ */
+export async function signInOrSignUpWithMobile(
+  prevState: MobileAuthFormState,
+  formData: FormData
+): Promise<MobileAuthFormState> {
+  const mobile = String(formData.get("mobile") ?? "").trim();
+  const mobileError = validateMobile(mobile);
+  if (mobileError) return { errors: { mobile: mobileError } };
+
+  const phone = normalizePhone(mobile);
+  const admin = createAdminClient();
+
+  // Only ever matches a row signUpWithMobile created — it's the only
+  // writer of profiles.phone, and `email is null` is a second,
+  // independent guard so this can never touch a normal email/password
+  // account's credentials even if some future feature also sets `phone`.
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("phone", phone)
+    .is("email", null)
+    .maybeSingle();
+
+  if (existingProfile) {
+    return signInExistingMobileAccount(existingProfile.id, formData);
+  }
+
+  return signUpWithMobile(prevState, formData);
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();

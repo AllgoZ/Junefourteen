@@ -954,13 +954,14 @@ a few hundred products.
 
 ## 14. Database schema & RLS
 
-Twenty-three tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
+Twenty-four tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
 triggers.sql`, `0003_rls.sql`, `0004_lockdown_internal.sql`, `0005_profile_
 email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0009_banner_mobile_image.sql`, `0010_banner_content_fields.sql`,
 `0011_order_tracking.sql`, `0012_order_payment_fields.sql`,
 `0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql`,
-`0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`
+`0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`,
+`0017_legal_pages.sql`
 — `0008`/`0011`/`0012` are plain `alter table` additions with no new table,
 `0009` renames `banners`' original image columns to `desktop_*` and adds a
 parallel optional `mobile_*` set, `0010` adds banners' optional
@@ -992,6 +993,7 @@ and `everyday-edit`), which a single FK can't represent.
 | `homepage_gallery_images` | `0014` — the four photos in the "Follow Along" Instagram-style grid: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, `sort_order`, `is_active`. Seeded with the same four `GALLERY_IMAGES` paths and `TILE_TONES` values `social-section.tsx` used to hardcode. Each tile is edited independently in the admin (no add/remove/reorder UI — the storefront grid layout assumes a fixed set), same RLS-locked-down shape as `shipping_zones`. |
 | `rate_limit_hits` | `0015` — backs `lib/rate-limit.ts`'s Postgres-based fixed-window limiter (§22): `key` (a `"bucket:identifier"` string) + `created_at`. Rows are short-lived (opportunistic cleanup inside the limiter itself, no cron); chosen over in-memory/Redis specifically because no process here can hold a counter safely across serverless instances. Same RLS-locked-down, service-role-only shape as `shipping_zones`. |
 | `about_page_content` | `0016` — another **singleton row**. Backs every text field and the three images (`hero_*`/`story_*`/`philosophy_*`, plus `journal_*` text with no image) on `/about`, editable from `/admin/about` (§17). Seeded with the exact copy `app/(site)/about/page.tsx` had hardcoded before — verified via direct query to match byte-for-byte. Same RLS-locked-down shape as `tax_settings`/`homepage_campaign`. |
+| `legal_pages` | `0017` — **two named rows**, not a boolean-singleton (`slug text primary key check (slug in ('privacy', 'terms'))`) — `title`, `subtitle`, `body` (free text, not fixed columns; see §17's write-up of `LegalPageBody`'s parsing convention), editable from `/admin/legal`. Seeded with the exact copy `/privacy`/`/terms` had hardcoded before. Same RLS-locked-down shape as `about_page_content`. |
 | `schema_migrations` | Migration-runner bookkeeping (§20), not app data — RLS-locked to deny-all via PostgREST (`0004`), reachable only by direct Postgres connection or the service-role client. |
 
 **RLS philosophy** (all policies in `0003_rls.sql`): public `SELECT` on
@@ -1383,6 +1385,22 @@ through `validateImageFile` (`lib/cloudinary/validate-image.ts`, §22) —
 the current security baseline from day one, since this is a new upload
 surface added after that hardening pass, not one that predates it.
 
+`/admin/legal` (new `AdminNav` sidebar entry, `FileText` icon) — editing
+for `/privacy` and `/terms` over the two-row `legal_pages` table (§14): one
+page, two `AdminCard`s (`LegalPageForm`, one `useActionState` instance
+each), each editing `title`/`subtitle`/a free-text `body`. Deliberately
+**not** modeled as fixed columns like About Us — legal pages have a
+variable number of sections that change over time, so `body` is one large
+textarea using a minimal convention (`components/marketing/legal-page-
+body.tsx#parseLegalBody`): a line starting with `## ` opens a new section
+(renders as `<h2>`), blank-line-separated blocks are paragraphs, and
+anything before the first `## ` renders as standalone intro paragraphs —
+exactly the two-level structure both pages already had hand-written in
+JSX, so `StaticPage`'s existing CSS (styles any `h2`/`p` it finds inside
+its children) needed no changes. No markdown library added — this covers
+the one structure these two pages actually use, nothing more. The admin
+form shows the convention as inline help text next to the textarea.
+
 **Bulk product selection** (`components/admin/products-table.tsx`, a
 Client Component the Server Component list page hands its already-fetched
 rows to). A header checkbox (indeterminate when some-but-not-all rows are
@@ -1696,6 +1714,28 @@ output, not a live click-through. If anything at `/shop`, `/product/*`, or
 `/collections/*` still shows only a skeleton after this fix, that is new
 information this reasoning didn't account for and needs its own fresh
 audit, not an assumption that the same fix needs to be "tried harder."
+
+**Second regression, same root cause (an unverified CSP directive), caught
+when a real checkout attempt failed**: `frame-src` was scoped to
+`https://*.razorpay.com`, which broke every **card** payment at the 3D
+Secure/OTP step — order creation succeeded normally (that step never
+touches Razorpay), Checkout's script and its own modal loaded fine
+(covered by `script-src`), but the bank's verification iframe that opens
+mid-payment is hosted on the *card-issuing bank's own domain* (its
+ACS — Access Control Server — host), never a `razorpay.com` one, and
+which bank that is depends on the customer's card and can't be
+enumerated ahead of time. Confirmed against real payment-industry
+guidance (not guessed): `frame-src *` for exactly this reason is the
+accepted, common practice for merchant CSPs sitting in front of a card
+payment gateway. Fixed by widening `frame-src` to `*` — `frame-ancestors
+'self'` (the *unrelated* protection against this site itself being framed
+by someone else) is untouched and still fully enforced. The pattern
+across both regressions: a CSP directive that looked reasonable by
+static/`curl`-based reasoning broke a flow that only exercises itself
+through real, dynamic browser behavior (streamed script execution;
+mid-payment bank redirects) — worth remembering before tightening any
+CSP directive further without a live end-to-end test of every flow it
+touches, not just the ones easy to check with `curl`.
 
 **File upload hardening** (`SECURITY.md`'s prior #4 finding) —
 `lib/cloudinary/validate-image.ts` (new): an explicit MIME allowlist, a

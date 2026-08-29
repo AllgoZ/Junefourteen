@@ -586,6 +586,12 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["about_page_content"]["Insert"]>;
         Relationships: [];
       };
+      legal_pages: {
+        Row: { slug: string; title: string; subtitle: string; body: string; updated_at: string };
+        Insert: { slug: string; title: string; subtitle?: string; body?: string; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["legal_pages"]["Insert"]>;
+        Relationships: [];
+      };
       rate_limit_hits: {
         Row: { id: number; key: string; created_at: string };
         Insert: { id?: number; key: string; created_at?: string };
