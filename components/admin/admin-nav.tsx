@@ -15,6 +15,7 @@ import {
   Ticket,
   BookOpen,
   FileText,
+  ClipboardList,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ const LINKS = [
   { href: "/admin/banners", label: "Banners", icon: Image },
   { href: "/admin/about", label: "About Page", icon: BookOpen },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/admin/order-requests", label: "Order Requests", icon: ClipboardList },
   { href: "/admin/shipping", label: "Shipping", icon: Truck },
   { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/customers", label: "Customers", icon: Users },

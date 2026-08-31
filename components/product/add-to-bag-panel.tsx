@@ -16,6 +16,7 @@ import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getIsAuthed } from "@/lib/auth/client-auth-store";
 import { MobileSignupDialog } from "@/components/account/mobile-signup-dialog";
+import { RequestToOrderDialog } from "@/components/product/request-to-order-dialog";
 import type { CustomMeasurements, Product, Size, SleeveOption } from "@/types/product";
 
 /**
@@ -52,6 +53,7 @@ export function AddToBagPanel({ product }: { product: Product }) {
   // whether this dialog is submitted or skipped.
   const [mobileSignupOpen, setMobileSignupOpen] = useState(false);
   const pendingCheckoutRef = useRef(false);
+  const [requestToOrderOpen, setRequestToOrderOpen] = useState(false);
 
   function handleMobileSignupOpenChange(open: boolean) {
     setMobileSignupOpen(open);
@@ -194,8 +196,12 @@ export function AddToBagPanel({ product }: { product: Product }) {
 
       <div ref={inlineButtonRef} className="flex flex-col gap-3">
         {product.isSoldOut ? (
-          <Button size="lg" disabled className="h-14 w-full rounded-2xl text-base">
-            Sold Out
+          <Button
+            size="lg"
+            onClick={() => setRequestToOrderOpen(true)}
+            className={cn("h-14 w-full rounded-2xl text-base", PRIMARY_CTA)}
+          >
+            Request to Order
           </Button>
         ) : (
           <div className="flex gap-3">
@@ -249,6 +255,14 @@ export function AddToBagPanel({ product }: { product: Product }) {
       </AnimatePresence>
 
       <MobileSignupDialog open={mobileSignupOpen} onOpenChange={handleMobileSignupOpenChange} />
+      {product.isSoldOut && (
+        <RequestToOrderDialog
+          open={requestToOrderOpen}
+          onOpenChange={setRequestToOrderOpen}
+          productId={product.id}
+          sizes={product.sizes}
+        />
+      )}
     </div>
   );
 }

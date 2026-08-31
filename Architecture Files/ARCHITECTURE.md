@@ -982,14 +982,14 @@ a few hundred products.
 
 ## 14. Database schema & RLS
 
-Twenty-four tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
+Twenty-five tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
 triggers.sql`, `0003_rls.sql`, `0004_lockdown_internal.sql`, `0005_profile_
 email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0009_banner_mobile_image.sql`, `0010_banner_content_fields.sql`,
 `0011_order_tracking.sql`, `0012_order_payment_fields.sql`,
 `0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql`,
 `0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`,
-`0017_legal_pages.sql`
+`0017_legal_pages.sql`, `0018_order_requests.sql`
 — `0008`/`0011`/`0012` are plain `alter table` additions with no new table,
 `0009` renames `banners`' original image columns to `desktop_*` and adds a
 parallel optional `mobile_*` set, `0010` adds banners' optional
@@ -1022,6 +1022,7 @@ and `everyday-edit`), which a single FK can't represent.
 | `rate_limit_hits` | `0015` — backs `lib/rate-limit.ts`'s Postgres-based fixed-window limiter (§22): `key` (a `"bucket:identifier"` string) + `created_at`. Rows are short-lived (opportunistic cleanup inside the limiter itself, no cron); chosen over in-memory/Redis specifically because no process here can hold a counter safely across serverless instances. Same RLS-locked-down, service-role-only shape as `shipping_zones`. |
 | `about_page_content` | `0016` — another **singleton row**. Backs every text field and the three images (`hero_*`/`story_*`/`philosophy_*`, plus `journal_*` text with no image) on `/about`, editable from `/admin/about` (§17). Seeded with the exact copy `app/(site)/about/page.tsx` had hardcoded before — verified via direct query to match byte-for-byte. Same RLS-locked-down shape as `tax_settings`/`homepage_campaign`. |
 | `legal_pages` | `0017` — **two named rows**, not a boolean-singleton (`slug text primary key check (slug in ('privacy', 'terms'))`) — `title`, `subtitle`, `body` (free text, not fixed columns; see §17's write-up of `LegalPageBody`'s parsing convention), editable from `/admin/legal`. Seeded with the exact copy `/privacy`/`/terms` had hardcoded before. Same RLS-locked-down shape as `about_page_content`. |
+| `order_requests` | `0018` — pre-order leads captured from the PDP's "Request to Order" button (§17), which replaces the disabled Sold Out button *only there* — grid-card/wishlist Sold Out badges are untouched. Not `orders`/`order_items`: this is a lead, not a priced/paid transaction, so it deliberately never touches the authoritative-pricing order pipeline. `product_id` is `on delete set null` (not cascade) with `product_name`/`product_slug` snapshotted directly on the row (same convention as `order_items`), so a request survives a later product deletion. `status` (`new`/`contacted`/`fulfilled`/`cancelled`) is admin-managed from `/admin/order-requests`. Same RLS-locked-down, service-role-only shape as `orders`. |
 | `schema_migrations` | Migration-runner bookkeeping (§20), not app data — RLS-locked to deny-all via PostgREST (`0004`), reachable only by direct Postgres connection or the service-role client. |
 
 **RLS philosophy** (all policies in `0003_rls.sql`): public `SELECT` on

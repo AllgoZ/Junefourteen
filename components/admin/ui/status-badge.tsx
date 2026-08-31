@@ -32,6 +32,21 @@ export function PaymentStatusBadge({ status }: { status: string }) {
   );
 }
 
+const ORDER_REQUEST_STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  new: "outline",
+  contacted: "secondary",
+  fulfilled: "default",
+  cancelled: "destructive",
+};
+
+export function OrderRequestStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={ORDER_REQUEST_STATUS_VARIANT[status] ?? "outline"} className="capitalize">
+      {status}
+    </Badge>
+  );
+}
+
 export function StockStatusBadge({
   stockQuantity,
   lowStockThreshold,

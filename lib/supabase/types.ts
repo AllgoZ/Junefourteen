@@ -592,6 +592,38 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["legal_pages"]["Insert"]>;
         Relationships: [];
       };
+      order_requests: {
+        Row: {
+          id: string;
+          product_id: string | null;
+          product_name: string;
+          product_slug: string;
+          customer_name: string;
+          phone: string;
+          email: string | null;
+          size: string;
+          quantity: number;
+          delivery_address: string;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id?: string | null;
+          product_name: string;
+          product_slug: string;
+          customer_name: string;
+          phone: string;
+          email?: string | null;
+          size: string;
+          quantity: number;
+          delivery_address: string;
+          status?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["order_requests"]["Insert"]>;
+        Relationships: [];
+      };
       rate_limit_hits: {
         Row: { id: number; key: string; created_at: string };
         Insert: { id?: number; key: string; created_at?: string };
