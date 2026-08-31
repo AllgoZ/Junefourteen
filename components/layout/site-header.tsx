@@ -34,11 +34,21 @@ export function SiteHeader() {
     // On the homepage the header should stay transparent for the height of
     // the hero (75dvh), not just the first few px of scroll — everywhere
     // else keeps the original small threshold.
+    //
+    // Deliberately NOT calling onScroll() synchronously on mount: dvh-based
+    // layout (the hero's h-[75dvh] plus its negative top margin pulling it
+    // under the header) isn't reliably settled the instant this effect
+    // runs on a mobile browser — window.innerHeight/scrollY read right at
+    // mount can reflect a not-yet-resolved viewport (e.g. before the
+    // address bar's collapsed/expanded state is final), which was
+    // incorrectly flipping `scrolled` to true on a fresh load at the very
+    // top of the page. The initial `scrolled = false` state is already
+    // correct for a fresh load; only trust measurements taken from a real
+    // scroll event, by which point the browser's viewport has settled.
     const onScroll = () => {
       const threshold = pathname === "/" ? window.innerHeight * 0.7 : 4;
       setScrolled(window.scrollY > threshold);
     };
-    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [pathname]);

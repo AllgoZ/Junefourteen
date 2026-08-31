@@ -608,6 +608,34 @@ take effect — `next.config.ts` isn't hot-reloaded.
   photo exactly as they always have; only the *solid bar* is scroll-gated,
   not the header's presence. Don't reintroduce the fully-hidden version.)
 
+  **Mobile bug, confirmed via two production screenshots at the identical
+  scroll position and fixed**: the `useEffect` that computes `scrolled`
+  used to call `onScroll()` synchronously on mount, in addition to
+  attaching the listener. On a real mobile browser, this incorrectly
+  flipped the header to its solid state on a fresh homepage load — every
+  time, at the very top of the page — and it only ever self-corrected
+  after the user scrolled at least once (then stayed correct on scrolling
+  back to the top). Root cause: the hero uses `h-[75dvh]` plus a negative
+  top margin to sit under the sticky header (§10 above), and `dvh`-based
+  layout isn't reliably settled the instant this effect first runs on a
+  mobile browser — e.g. before the address bar's collapsed/expanded state
+  is final — so the synchronous `window.innerHeight`/`window.scrollY`
+  read at mount could reflect a not-yet-resolved viewport. A real scroll
+  event forces the browser to settle first, which is why scrolling always
+  "fixed" it. Fix: removed the synchronous `onScroll()` call on mount —
+  the initial `scrolled = false` state is already correct for a fresh
+  load, so there was never a need to immediately recompute it; only
+  measurements taken from a genuine scroll event (after the viewport has
+  settled) are trusted now. Confirmed via the server-rendered HTML both
+  before and after (`curl`) that the initial response was always correctly
+  `bg-transparent` — this was purely a client-side, post-hydration
+  overwrite of an already-correct value, not an SSR issue. One
+  self-correcting tradeoff accepted: a page loaded via a restored scroll
+  position (e.g. some browsers on refresh) now shows the not-yet-scrolled
+  header style for a moment until the next real scroll event, instead of
+  being instantly correct — minor and rare next to the bug it replaces,
+  which hit every fresh homepage visit.
+
 - **Collections** (`components/home/featured-collections.tsx`) — the
   homepage section is titled just "Collections" (not "Featured Collections"),
   rendered via `HomeSection`'s `compact` heading style. Tiles carry **no text
