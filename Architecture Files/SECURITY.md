@@ -73,7 +73,14 @@ dropped — see their sections below for why).
   else security-sensitive is gated on phone ownership (no SMS-based
   recovery flow exists to abuse), but flag this before adding one, and
   don't let it quietly become the identifier for anything higher-stakes
-  without adding real verification first.
+  without adding real verification first. The same mechanism (as
+  `lib/services/auth.ts#linkOrCreateAccountByMobile`, a standalone
+  function, not a shared call site) now also runs from a second entry
+  point — a guest submitting "Request to Order" (§14/§16 in
+  `ARCHITECTURE.md`) — since that form already collects a phone number.
+  Same tradeoff, same severity reasoning; noted here so this doesn't read
+  as a second, separate risk when it's really the same one from a second
+  door.
 
 ## 2. Authorization
 

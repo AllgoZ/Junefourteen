@@ -134,6 +134,16 @@ dead end, they can submit their name, phone, email (optional), size,
 quantity, and delivery address, and see a confirmation that someone will
 follow up.
 
+If the person submitting isn't signed in, the site automatically creates
+a customer account for them using the phone number they entered (or signs
+them into their existing one, if that number has already requested
+something before) — no password or OTP involved on their end. This is
+why you may see a new entry appear under **Customers** right after
+someone submits a request without ever having "signed up" in the usual
+sense; it also means they can come back later and see the status of their
+request under their own **Account → Order Requests** tab, rather than it
+only existing in your admin view.
+
 This page is where those requests land. For each one you can see the
 product, the customer's contact details, what they asked for, and update
 its status as you work through it:

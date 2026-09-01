@@ -1302,15 +1302,42 @@ is why sold-out product pages are no longer fully static (§19 notes the
 same thing from the caching side). A guest's "Requested" state is
 session-scoped only (resets on reload) since there's no reliable identity
 to check against without signing in — not a bug, an inherent limit of not
-being signed in.
+being signed in. A guest submission also links (or creates) an account
+for the phone number given — `lib/services/auth.ts
+#linkOrCreateAccountByMobile`, a standalone function purposely not
+sharing code with `signInOrSignUpWithMobile` (different UI contract,
+different caller, safer to duplicate the small amount of overlapping
+logic than reshape code the mobile-signup dialog depends on). Only ever
+runs for an already-signed-out visitor — an already-signed-in visitor's
+session is never touched, regardless of what phone number is typed into
+the form — and fails silently (never blocks the actual submission) if the
+account step itself errors. `OrderRequestFormState` gained a `signedIn`
+flag so the dialog can sync the client-side `setIsAuthed` flag
+(`lib/auth/client-auth-store.ts`) when this happens, same as the mobile
+signup dialog does. Verified directly against the database: a brand-new
+number creates an account, the exact same number submitted again finds
+that same account rather than duplicating it, and the resulting
+`order_requests` row is genuinely visible to that account under RLS once
+signed in — not just that the rows look right.
+
 `components/product/request-to-order-dialog.tsx`'s own `<DialogContent>`
-also got a scoped `max-h-[85vh] overflow-y-auto` (the shared `Dialog`
-primitive, `components/ui/dialog.tsx`, has no height/scroll handling of
-its own) plus a two-column field layout (Phone+Email, Size+Quantity) —
-the six-field form was overflowing short mobile viewports with no way to
-reach the rest of it. Scoped via that one component's own `className`
-override, not a change to the shared primitive every other dialog on the
-site also uses.
+also needed a second, more robust mobile fix after the first one still
+felt "stuck" on a real device: vertical centering
+(`top-1/2 -translate-y-1/2`, from the shared `Dialog` primitive) plus a
+plain `vh` max-height don't account for a mobile on-screen keyboard
+shrinking the *visible* viewport without necessarily updating `vh`, so
+part of the six-field form could end up rendered behind/below the
+keyboard with no way to scroll it into view. Fixed with two changes,
+both still scoped to just this dialog via `className` (never the shared
+primitive, never another dialog on the site): `dvh` instead of `vh` for
+the max-height (tracks the actual visible viewport — same unit already
+used for the hero, `hero-section.tsx`'s `h-[75dvh]`), and anchored near
+the top on mobile (`top-4 translate-y-0`, cancelling the base classes)
+instead of centered, reverting to the original centered treatment at
+`sm:` and up where there's no keyboard to fight. Verified the class
+merge itself resolves as intended (horizontal centering left untouched,
+vertical positioning correctly overridden and restored per breakpoint) by
+computing it directly with `tailwind-merge`, not just by inspection.
 
 **Customer-side visibility**: a new "Order Requests" row on `/account`
 (`components/account/order-requests-panel.tsx`, between Orders and

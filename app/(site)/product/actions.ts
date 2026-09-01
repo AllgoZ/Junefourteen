@@ -6,6 +6,7 @@ import { createOrderRequest } from "@/lib/repositories/order-requests";
 import { validateMobile, normalizePhone, isValidEmail } from "@/lib/validation";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { verifySession } from "@/lib/auth/dal";
+import { linkOrCreateAccountByMobile } from "@/lib/services/auth";
 
 export interface OrderRequestFormState {
   errors?: {
@@ -18,6 +19,8 @@ export interface OrderRequestFormState {
     form?: string;
   };
   success?: boolean;
+  /** True when submitting this request also signed the browser in (a guest's phone number didn't have an account yet, or already did) — lets the dialog sync the client-side auth flag. */
+  signedIn?: boolean;
 }
 
 export async function submitOrderRequestAction(
@@ -56,22 +59,40 @@ export async function submitOrderRequestAction(
     return { errors: { form: "This product is currently in stock — please use Add to Bag instead." } };
   }
 
+  const phone = normalizePhone(phoneRaw);
+
   try {
     const user = await verifySession();
+    let userId = user?.id ?? null;
+    let signedIn = false;
+
+    // Only for a guest — an already-signed-in visitor's session is never
+    // touched here, regardless of what phone number they type into the
+    // form. This is what "registers the request under an account" for a
+    // guest: find (and sign into) the account for this number, or create
+    // one, exactly like the mobile signup popup elsewhere on the site.
+    if (!userId) {
+      const linkResult = await linkOrCreateAccountByMobile(phone);
+      if (linkResult.userId) {
+        userId = linkResult.userId;
+        signedIn = true;
+      }
+    }
+
     const admin = createAdminClient();
     await createOrderRequest(admin, {
       productId: product.id,
       productName: product.name,
       productSlug: product.slug,
-      userId: user?.id ?? null,
+      userId,
       customerName,
-      phone: normalizePhone(phoneRaw),
+      phone,
       email: emailRaw || null,
       size,
       quantity,
       deliveryAddress,
     });
-    return { success: true };
+    return { success: true, signedIn };
   } catch {
     return { errors: { form: "Could not submit your request. Please try again." } };
   }

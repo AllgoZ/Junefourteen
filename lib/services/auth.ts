@@ -265,6 +265,67 @@ export async function signInOrSignUpWithMobile(
   return signUpWithMobile(prevState, formData);
 }
 
+export interface MobileAccountLinkResult {
+  userId?: string;
+}
+
+/**
+ * Used only by submitOrderRequestAction (app/(site)/product/actions.ts),
+ * for a guest submitting a "Request to Order" — that form already collects
+ * a phone number, so there's no reason to leave the request unlinked to an
+ * account when it doesn't have to be. Finds the account for this phone
+ * number if one already exists and signs the browser in as it (same
+ * mechanism as signInExistingMobileAccount above), or creates one if not
+ * (same mechanism as signUpWithMobile). Deliberately a standalone
+ * function, not a refactor of either — those are bound to the mobile
+ * signup dialog's own UI contract (`MobileAuthFormState`, cart/wishlist
+ * merging) and this caller needs neither, and duplicating this much
+ * smaller surface is safer than reshaping code an unrelated flow depends
+ * on. Only ever called for an already-signed-out visitor — see the
+ * caller; this never touches an already-signed-in visitor's session
+ * regardless of what phone number they type into the form. Same
+ * zero-verification tradeoff as the rest of this mobile flow (see
+ * `signInExistingMobileAccount`'s comment and `SECURITY.md`) — this proves
+ * nothing about who's actually submitting the number. Fails silently
+ * (returns `{}`) on any error: linking an account is a bonus, never a
+ * reason to block someone from actually submitting their request.
+ */
+export async function linkOrCreateAccountByMobile(phone: string): Promise<MobileAccountLinkResult> {
+  try {
+    const admin = createAdminClient();
+    const supabase = await createClient();
+
+    const { data: existingProfile } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("phone", phone)
+      .is("email", null)
+      .maybeSingle();
+
+    if (existingProfile) {
+      const password = crypto.randomUUID();
+      const { data, error: updateError } = await admin.auth.admin.updateUserById(existingProfile.id, { password });
+      if (updateError || !data.user.email) return {};
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: data.user.email, password });
+      if (signInError) return {};
+      return { userId: existingProfile.id };
+    }
+
+    const password = crypto.randomUUID();
+    const syntheticEmail = `mobile-${phone.replace(/\D/g, "")}@phone.invalid`;
+    const { data, error } = await admin.auth.admin.createUser({ email: syntheticEmail, email_confirm: true, password });
+    if (error || !data.user) return {};
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: syntheticEmail, password });
+    if (signInError) return {};
+
+    await supabase.from("profiles").update({ phone, email: null }).eq("id", data.user.id);
+    return { userId: data.user.id };
+  } catch {
+    return {};
+  }
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
