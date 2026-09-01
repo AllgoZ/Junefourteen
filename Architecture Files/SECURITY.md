@@ -273,7 +273,10 @@ specifically because this app has no long-lived process to hold an
 in-memory counter safely across serverless instances) guards `signIn`
 (by IP and by IP+email composite), `signUp`, `applyCouponAction`, and
 `createOrderAction`. Fails open on its own DB errors, so infrastructure
-trouble never turns into a checkout/sign-in outage.
+trouble never turns into a checkout/sign-in outage. The same limiter now
+also guards `submitOrderRequestAction` (bucket `"order-request"`, by IP,
+8 per 10 minutes) — added when that public, unauthenticated form shipped,
+for the same reasoning as the buckets above.
 
 ## 9. Dependencies
 
@@ -281,6 +284,40 @@ trouble never turns into a checkout/sign-in outage.
 writing): **0 vulnerabilities** across all severity levels (info through
 critical). Re-run this periodically — it's a point-in-time result, not a
 standing guarantee.
+
+## 10. Third-party data sharing (Meta Pixel)
+
+`components/analytics/meta-pixel.tsx` sends browsing data to Meta on every
+storefront page view when `NEXT_PUBLIC_META_PIXEL_ID` is set (unset by
+default — see §5; admin routes never load it at all, by construction, since
+`app/admin/` has its own separate root layout that never mounts this
+component). Worth stating plainly what actually leaves the site, since this
+is the one place user browsing behavior is intentionally shared with a
+third party rather than kept in this app's own database:
+
+- **What's sent**: the base pixel snippet's implicit event data only — page
+  URL, referrer, and Meta's own browser/device fingerprinting signals (its
+  standard behavior for any site running the pixel, not something this
+  integration adds to). The client's IP address is inherent to the beacon
+  request itself (`www.facebook.com/tr`), not something the code passes
+  explicitly.
+- **What's *not* sent**: no PII is explicitly passed to `fbq('init', ...)`
+  or any tracked event — no email, name, phone, or order contents. Only
+  `PageView` is tracked (`ARCHITECTURE.md` §23); no `Purchase`/`AddToCart`/
+  other conversion events exist yet, so no cart or order data reaches Meta
+  today. If custom events are added later (noted as future work in §23),
+  re-audit this section — passing order value/items to a `Purchase` event
+  would meaningfully change what leaves the site and belongs in this
+  writeup.
+- **Scope guarantee**: storefront-only is a structural property (separate
+  root layout for `app/admin/`), not a runtime check that could be
+  bypassed by a misconfigured route — there's no code path under
+  `app/admin/` that renders `<MetaPixel>`.
+- **User control**: the pixel is opt-out only via ad-blockers/browser
+  tracking protection on the visitor's end — this integration has no
+  cookie-consent gate of its own. Reasonable for the current scale/market;
+  flag this if operating in a jurisdiction requiring explicit consent
+  before non-essential tracking scripts load (e.g. GDPR-covered traffic).
 
 ## What's already strong — don't regress these
 

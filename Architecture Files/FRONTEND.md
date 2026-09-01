@@ -52,14 +52,23 @@ components/
   layout/      Container, SiteHeader, SiteFooter, MobileNav
   home/        Homepage sections (hero, collections, scroll showcase, campaign
                banner, social grid) — see §7 below
-  product/     Card/grid/gallery/image, size & custom-size flow, add-to-bag panel
+  product/     Card/grid/gallery/image, size & custom-size flow, add-to-bag
+               panel, request-to-order-dialog.tsx (the sold-out-product
+               lead-capture form, mobile-keyboard-safe per §9)
   cart/        Drawer, line item, shipping estimator
   checkout/    Checkout form + order summary
-  account/     Sign-in/up forms, orders/addresses/profile panels
+  account/     Sign-in/up forms, orders/addresses/profile panels, order-requests
+               tab (a customer's own submitted "Request to Order" leads, §8)
   shop/        FilterBarDesktop (Popover bar), FilterSheet/SortSheet (mobile)
   admin/       Admin nav + every entity form (product/collection/banner/
-               shipping-zone/coupon/campaign-banner/gallery-images-form) —
-               see §8 for the shared form pattern
+               shipping-zone/coupon/campaign-banner/gallery-images-form/
+               about-page-form/legal-page-form) — see §8 for the shared form
+               pattern, incl. the stay-on-page variant these last two use
+  marketing/   legal-page-body.tsx — shared renderer for the admin-authored
+               `## Heading` + blank-line-separated-paragraph body format used
+               by both /privacy and /terms (see §8's Legal Pages note)
+  analytics/   meta-pixel.tsx — storefront-only, gated on
+               NEXT_PUBLIC_META_PIXEL_ID, see ARCHITECTURE.md §23
   providers/   CartProvider, WishlistProvider (§6)
 hooks/         use-recent-searches.ts
 lib/config/site.ts   Brand config — the only place to change brand name/nav/
@@ -197,9 +206,13 @@ Component or the section component itself, not buried in the service layer.
 
 ## 8. Forms & Server Actions
 
-Every admin entity form (`product-form.tsx`, `collection-form.tsx`,
+Admin entity forms come in two shapes depending on whether the entity has
+its own list page to return to.
+
+**Redirect-to-list** (`product-form.tsx`, `collection-form.tsx`,
 `banner-form.tsx`, `shipping-zone-form.tsx`, `coupon-form.tsx`,
-`campaign-banner-form.tsx`, `gallery-images-form.tsx`) follows one shape:
+`campaign-banner-form.tsx`, `gallery-images-form.tsx`) — anything with a
+dedicated `/admin/x` index page to go back to:
 
 ```tsx
 "use client";
@@ -220,8 +233,30 @@ return (
 );
 ```
 
-Fires a toast and redirects to the **list** page on success — create and
-update alike. A per-row/per-image upload widget that lives outside the main
+**Stay-on-page** (`about-page-form.tsx`, `legal-page-form.tsx`, and the
+Settings-tab forms — Tax, Social Links) — singleton/settings content with no
+list to return to, since the form itself *is* the destination:
+
+```tsx
+useEffect(() => {
+  if (state.success && !state.error) toast.success("Saved.");
+}, [state.success, state.error]);
+// no router.push — the form just re-renders with the saved values
+```
+
+Same `useActionState`/`AdminCard`/`state.error` shell either way; the only
+difference is whether the success effect navigates. Default to
+redirect-to-list for any new entity that gets its own admin list page, and
+stay-on-page only for genuine one-row/singleton content.
+
+**Order Requests** (`app/admin/(protected)/order-requests/`) is a read/
+status-update list, not a create/edit form — it follows the Orders admin
+page's pattern instead: a status filter, a table, and a small inline
+`<select>` + submit per row calling `updateOrderRequestStatusAction`
+(`requireAdmin()` → update → `revalidatePath`), not the `useActionState`
+form shell above.
+
+A per-row/per-image upload widget that lives outside the main
 `<form>` (e.g. `ProductImagesManager`, `GalleryImagesForm`'s per-tile forms)
 reports its own `pending` state up to the parent via an `onUploadingChange`
 callback so the main Save button can disable itself for the duration —
@@ -243,6 +278,15 @@ global Server Action body size limit is 10MB (`next.config.ts`'s
 `experimental.serverActions.bodySizeLimit`) — a real camera/phone JPG can
 exceed Next's 1MB default, which is why this is raised globally rather than
 per-route.
+
+**Legal Pages / About Page body text**: `legal-page-form.tsx` and
+`about-page-form.tsx` store long-form content as plain text with a tiny
+convention layered on top — a line starting `## ` becomes a section heading,
+blank lines separate paragraphs — parsed by
+`components/marketing/legal-page-body.tsx` at render time. No rich-text
+editor, no markdown library: it's a handful of `.split()`/`.startsWith()`
+calls. Don't reach for a full markdown renderer here without a real reason;
+the format is deliberately this narrow.
 
 ## 9. Frontend-specific gotchas
 
@@ -266,6 +310,26 @@ per-route.
   CSS property in modern browsers, separate from `transform`.
 - **`params`/`searchParams` are Promises** in `page.tsx`/`layout.tsx`/
   `generateMetadata` — must `await`.
+- **`dvh`, not `vh`, for any dialog/sheet that must survive an on-screen
+  keyboard** — a mobile browser's on-screen keyboard shrinks the *visual*
+  viewport without necessarily updating a plain `vh` unit against it (a
+  known mobile quirk), which can leave a `max-h-[85vh]`-centered dialog
+  effectively stuck with fields rendered behind the keyboard and no way to
+  scroll them into view. `dvh` is defined to track the actual visible
+  viewport. See `request-to-order-dialog.tsx`'s `className` (also
+  top-anchored on mobile only, `top-4 translate-y-0`, so the keyboard eats
+  into empty space below the dialog instead of pushing an already-centered
+  dialog further off-screen) and `hero-section.tsx`'s `h-[75dvh]` for the
+  same unit used the same way.
+- **Scoping an override via a `className` prop, not editing the shared
+  primitive**: a one-off dialog needing different sizing/position than
+  `components/ui/dialog.tsx`'s base `DialogContent` should pass a
+  `className` (merged in last via `cn()`/`tailwind-merge`, so a later class
+  wins over an earlier same-property one) rather than changing the shared
+  primitive for every dialog. When the override is non-obvious, verify the
+  *actual* merged class string in a throwaway script rather than assuming
+  `tailwind-merge` resolved the conflict the way you expect — cheap
+  insurance against a silently-losing override.
 - Full list, including framework/build gotchas outside the frontend proper:
   `ARCHITECTURE.md` §9.
 
@@ -323,6 +387,8 @@ distraction.
 
 - `ARCHITECTURE.md` — full history, backend/data model, admin CMS feature
   inventory, chronological "why" for every non-obvious decision.
+- `backend.md` — the equivalent "about to write backend code" companion,
+  for repositories/services/Server Actions, the DB schema, RLS, and auth.
 - `SECURITY.md` — auth/authorization/payment security audit.
 - `OPTIMIZATION.md` — caching, image/font pipeline, and performance audit.
 - `ADMIN_CMS_AUDIT.md` — admin feature-parity backlog vs. Shopify Admin.

@@ -1649,7 +1649,9 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY     # anon-equivalent, safe client-side
 SUPABASE_SECRET_KEY                      # service-role-equivalent, server-only
 SUPABASE_JWT_SECRET                      # legacy, unused by the current key-based flow
-SUPABASE_DB_URL                          # session-pooler URL, scripts only (§9.14) — never the direct db.<ref> host
+SUPABASE_DB_URL                          # session-pooler URL, scripts only (§9.14) — never the direct db.
+
+<ref> host
 CLOUDINARY_CLOUD_NAME
 CLOUDINARY_API_KEY
 CLOUDINARY_API_SECRET
@@ -1657,6 +1659,9 @@ RAZORPAY_KEY_ID                          # server-only; also returned per-reques
                                           # Server Actions (Razorpay's key_id isn't a secret and must reach
                                           # Checkout.js) — never given a NEXT_PUBLIC_ prefix, §16
 RAZORPAY_KEY_SECRET                      # server-only, never leaves the server — signs/verifies payments
+RAZORPAY_WEBHOOK_SECRET                  # server-only, §22 — signs the raw webhook body (app/api/webhooks/
+                                          # razorpay), a separate secret/scheme from RAZORPAY_KEY_SECRET above.
+                                          # Set from the Razorpay Dashboard's Webhooks page, per mode (test/live).
 NEXT_PUBLIC_META_PIXEL_ID                # optional — Meta Pixel id for the storefront (§23). Not a secret;
                                           # leave unset to ship zero tracking code. Storefront-only.
 ```
