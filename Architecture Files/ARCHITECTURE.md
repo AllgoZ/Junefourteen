@@ -1630,6 +1630,8 @@ RAZORPAY_KEY_ID                          # server-only; also returned per-reques
                                           # Server Actions (Razorpay's key_id isn't a secret and must reach
                                           # Checkout.js) — never given a NEXT_PUBLIC_ prefix, §16
 RAZORPAY_KEY_SECRET                      # server-only, never leaves the server — signs/verifies payments
+NEXT_PUBLIC_META_PIXEL_ID                # optional — Meta Pixel id for the storefront (§23). Not a secret;
+                                          # leave unset to ship zero tracking code. Storefront-only.
 ```
 
 **Migrations** (`supabase/migrations/*.sql`, numbered, applied in order):
@@ -1651,8 +1653,9 @@ design. Sign up normally via `/account`, confirm the email, then run
 client, bypasses the `profiles.role` change guard, §14) to flip that one
 account to `role = "admin"`.
 
-**Deployment checklist**: set all seven env vars above in the hosting
-platform; run migrations + seed once against the target Supabase project;
+**Deployment checklist**: set all seven required env vars above in the hosting
+platform (plus `NEXT_PUBLIC_META_PIXEL_ID` if using the Meta Pixel, §23);
+run migrations + seed once against the target Supabase project;
 promote at least one admin account; confirm Supabase Auth's redirect
 URLs/allowed origins include the production domain; `npm run build` clean
 (verified in this session, §12 step 14). No CI is configured (unchanged from
@@ -1700,6 +1703,10 @@ upload validation, the React Compiler).
 - **SEO** (sitemap, robots, metadata strategy) — explicitly out of scope for
   the §22 hardening pass per its own brief; still open, to be handled
   separately.
+- **Analytics beyond a Meta Pixel `PageView`** — the pixel is wired in (§23)
+  but only tracks `PageView`; no custom conversion events (`AddToCart`,
+  `InitiateCheckout`, `Purchase`), no GA4, no Meta Conversions API / server
+  events.
 - See `SECURITY.md`'s findings table and `OPTIMIZATION.md`'s findings table
   for anything not listed here — both were re-checked as part of §22 and
   now mark each finding's actual status rather than leaving it open-ended.
@@ -1916,3 +1923,45 @@ visually confirm, and a real Razorpay test-mode webhook delivery (once
 `RAZORPAY_WEBHOOK_SECRET` is configured in the dashboard) is the way to
 exercise the webhook's happy path end-to-end, which wasn't possible here
 without that secret existing yet.
+
+## 23. Analytics (Meta Pixel)
+
+The **only** analytics/tracking on the site. Added on direct request from
+the raw Meta Events Manager base snippet — an explicitly additive change,
+no existing component/route/style/DB touched.
+
+- **`components/analytics/meta-pixel.tsx`** (Client Component) — mounted once
+  in `app/(site)/layout.tsx`, directly inside `<body>` above `<CartProvider>`.
+  Renders `next/script`'s `<Script id="meta-pixel-base"
+  strategy="afterInteractive">` carrying the verbatim base snippet
+  (`fbevents.js` loader + `fbq('init', <id>)` + first `fbq('track',
+  'PageView')`) plus the `<noscript>` 1×1 `www.facebook.com/tr` image.
+- **Storefront-only, structurally.** `app/(site)/` and `app/admin/` are
+  separate route groups with separate root layouts (§17) — the pixel is
+  mounted only in the storefront's, so it is impossible for it to load on
+  any `/admin/*` route. No runtime `pathname` check involved.
+- **Env-var gated.** `NEXT_PUBLIC_META_PIXEL_ID` (§20 — not a secret, ships
+  to the browser). Unset → the component returns `null` and renders zero
+  tracking code, so local dev / preview deploys are clean unless explicitly
+  configured. The live id is `1071938955211636`, set in the hosting platform.
+- **SPA `PageView` re-fire.** The storefront is client-navigated, so a
+  hard-load-only `PageView` would miss almost every view. A
+  `usePathname()` + `useEffect([pathname])` fires `window.fbq('track',
+  'PageView')` on each client-side route change; a `useRef<string | null>`
+  holding the last-tracked path skips the first run (the inline snippet
+  already sent that one) and absorbs Strict Mode's dev double-invoke. Keyed
+  on `pathname` only — not `useSearchParams()` (would need a `<Suspense>`
+  boundary and would fire on every `/shop` filter/sort click).
+- **CSP.** `next.config.ts#buildCsp()` gained `connect.facebook.net` in
+  `script-src`, and `www.facebook.com` + `connect.facebook.net` in both
+  `img-src` and `connect-src` (the `/tr/` event beacons go out as image GET
+  *and* `navigator.sendBeacon`). Added unconditionally (dev + prod), same as
+  the Razorpay entries. `SECURITY.md` §7 lists it in the audited-resources
+  set.
+- **Only `PageView`.** No custom `AddToCart` / `InitiateCheckout` /
+  `Purchase` events — those would mean touching cart/checkout components and
+  are deliberately out of scope for this pass. The `lib/` layering makes
+  adding them later a contained change (a helper alongside the component +
+  call sites in the relevant client components), not a rework.
+- **`Window.fbq` global type** is declared in the component file itself,
+  same pattern as `lib/payments/razorpay-client.ts`'s `Window.Razorpay`.

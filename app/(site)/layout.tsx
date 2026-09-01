@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Fraunces } from "next/font/google";
 import { Montserrat } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { MetaPixel } from "@/components/analytics/meta-pixel";
 import { CartProvider } from "@/components/providers/cart-provider";
 import { WishlistProvider } from "@/components/providers/wishlist-provider";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         className="flex min-h-full flex-col font-sans antialiased"
         suppressHydrationWarning
       >
+        <MetaPixel />
         <CartProvider>
           <WishlistProvider>
             <a

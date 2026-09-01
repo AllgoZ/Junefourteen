@@ -239,7 +239,9 @@ all of the above are set for every route, plus `Permissions-Policy`
 denying camera/microphone/geolocation (unused by this app) and
 `frame-ancestors 'self'`. The CSP was built from an audit of every actual
 external resource this app loads (Supabase, Cloudinary, Razorpay Checkout,
-self-hosted fonts) rather than a generic template. **`script-src` includes
+the Meta Pixel — `connect.facebook.net` script + `www.facebook.com` `/tr/`
+beacons, storefront-only, `ARCHITECTURE.md` §23 — and self-hosted fonts)
+rather than a generic template. **`script-src` includes
 `'unsafe-inline'`** — required by Next's own documented non-nonce CSP
 pattern, since Next inlines its hydration/RSC-streaming payload as
 `<script>` tags; omitting it caused a same-day regression (every

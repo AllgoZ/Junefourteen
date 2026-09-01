@@ -7,9 +7,13 @@ import type { NextConfig } from "next";
  * card/UPI/netbanking/wallet flows — kept as a `*.razorpay.com` wildcard
  * rather than enumerating exact subdomains, since Razorpay uses different
  * ones per payment method and a too-narrow list would silently break some
- * of them), and self-hosted fonts (next/font/google — zero runtime request
- * to Google's own font CDN, so no fonts.gstatic.com entry is needed here,
- * unlike a typical Next+Google-Fonts CSP).
+ * of them), the Meta Pixel (`fbevents.js` from connect.facebook.net, plus
+ * its `/tr/` event beacons to www.facebook.com — sent by both image GET and
+ * `navigator.sendBeacon`, hence the host is in img-src *and* connect-src;
+ * storefront-only, ARCHITECTURE.md §23), and self-hosted fonts
+ * (next/font/google — zero runtime request to Google's own font CDN, so no
+ * fonts.gstatic.com entry is needed here, unlike a typical Next+Google-Fonts
+ * CSP).
  *
  * `'unsafe-inline'` on **both** script-src and style-src, matching Next's
  * own documented "Without Nonces" CSP pattern exactly
@@ -41,15 +45,25 @@ function buildCsp(): string {
       "'self'",
       "'unsafe-inline'",
       "https://checkout.razorpay.com",
+      "https://connect.facebook.net",
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
-    "img-src": ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
+    "img-src": [
+      "'self'",
+      "data:",
+      "blob:",
+      "https://res.cloudinary.com",
+      "https://www.facebook.com",
+      "https://connect.facebook.net",
+    ],
     "font-src": ["'self'"],
     "connect-src": [
       "'self'",
       "https://*.supabase.co",
       "https://*.razorpay.com",
+      "https://www.facebook.com",
+      "https://connect.facebook.net",
       ...(isDev ? ["ws://localhost:*", "http://localhost:*"] : []),
     ],
     // Wide open, deliberately: for a card payment, Razorpay opens a 3D
