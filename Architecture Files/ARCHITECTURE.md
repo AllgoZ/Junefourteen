@@ -211,12 +211,13 @@ dummy images/                Original, uncropped source photos before they were 
 | `/search` | Full search results page (also reachable via the header search overlay) |
 | `/wishlist` | Wishlist grid + move-to-bag |
 | `/cart` | Full-page cart (same `CartContent` component the drawer uses, `variant="page"`) |
-| `/checkout` | Checkout shell — contact/address/delivery/payment-placeholder/order summary, no real payment |
-| `/account` | Signed-out: compact sign-in/create-account tabs. Signed-in: same Accordion rows (Orders/Wishlist/Addresses/Profile), now wired to real data — see §15. |
+| `/checkout` | Checkout shell — contact/address/delivery (auto-fetched once state+PIN are valid, §16)/coupon/payment, real Razorpay payment (§16/§22). |
+| `/account` | Signed-out: compact sign-in/create-account tabs. Signed-in: Accordion rows — Orders, **Order Requests** (§14/§17), Wishlist, Addresses, Profile — all wired to real data, §15. |
 | `/size-guide` | Standalone size chart page (same content as the in-PDP size guide modal) |
-| `/about`, `/contact`, `/shipping`, `/returns`, `/faq`, `/privacy`, `/terms` | Static/marketing pages via `components/marketing/static-page.tsx` |
+| `/about`, `/contact`, `/shipping`, `/returns`, `/faq`, `/privacy`, `/terms` | `/about`/`/privacy`/`/terms` are admin-editable CMS pages (§17); the rest are static/marketing pages via `components/marketing/static-page.tsx`. |
 | `/admin/login` | Admin sign-in, not gated (the one route inside `app/admin` outside the `(protected)` group) |
-| `/admin`, `/admin/products[/new,/[id]]`, `/admin/collections[/new,/[id]]`, `/admin/orders[/[id]]`, `/admin/customers`, `/admin/settings` | Admin CMS — see §17 |
+| `/admin`, `/admin/products[/new,/[id]]`, `/admin/inventory`, `/admin/collections[/new,/[id]]`, `/admin/banners[/new,/[id]]`, `/admin/about`, `/admin/legal`, `/admin/orders[/[id]]`, `/admin/order-requests`, `/admin/shipping[/new,/[id]]`, `/admin/coupons[/new,/[id]]`, `/admin/customers[/[id]]`, `/admin/settings` | Admin CMS — see §17 |
+| `/api/webhooks/razorpay` | Route Handler, not a page — the Razorpay payment-confirmation webhook (§22). |
 
 `/shop`, `/collections/[slug]`, `/search`, `/account`, and everything under
 `/admin` are server-rendered on demand (`ƒ` in the build output) — `/shop`
@@ -989,8 +990,9 @@ email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0011_order_tracking.sql`, `0012_order_payment_fields.sql`,
 `0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql`,
 `0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`,
-`0017_legal_pages.sql`, `0018_order_requests.sql`
-— `0008`/`0011`/`0012` are plain `alter table` additions with no new table,
+`0017_legal_pages.sql`, `0018_order_requests.sql`,
+`0019_order_requests_user_id.sql`
+— `0008`/`0011`/`0012`/`0019` are plain `alter table` additions with no new table,
 `0009` renames `banners`' original image columns to `desktop_*` and adds a
 parallel optional `mobile_*` set, `0010` adds banners' optional
 overlay-copy columns, `0013` adds `shipping_zones`/`coupons`/`tax_settings`
@@ -1022,7 +1024,7 @@ and `everyday-edit`), which a single FK can't represent.
 | `rate_limit_hits` | `0015` — backs `lib/rate-limit.ts`'s Postgres-based fixed-window limiter (§22): `key` (a `"bucket:identifier"` string) + `created_at`. Rows are short-lived (opportunistic cleanup inside the limiter itself, no cron); chosen over in-memory/Redis specifically because no process here can hold a counter safely across serverless instances. Same RLS-locked-down, service-role-only shape as `shipping_zones`. |
 | `about_page_content` | `0016` — another **singleton row**. Backs every text field and the three images (`hero_*`/`story_*`/`philosophy_*`, plus `journal_*` text with no image) on `/about`, editable from `/admin/about` (§17). Seeded with the exact copy `app/(site)/about/page.tsx` had hardcoded before — verified via direct query to match byte-for-byte. Same RLS-locked-down shape as `tax_settings`/`homepage_campaign`. |
 | `legal_pages` | `0017` — **two named rows**, not a boolean-singleton (`slug text primary key check (slug in ('privacy', 'terms'))`) — `title`, `subtitle`, `body` (free text, not fixed columns; see §17's write-up of `LegalPageBody`'s parsing convention), editable from `/admin/legal`. Seeded with the exact copy `/privacy`/`/terms` had hardcoded before. Same RLS-locked-down shape as `about_page_content`. |
-| `order_requests` | `0018` — pre-order leads captured from the PDP's "Request to Order" button (§17), which replaces the disabled Sold Out button *only there* — grid-card/wishlist Sold Out badges are untouched. Not `orders`/`order_items`: this is a lead, not a priced/paid transaction, so it deliberately never touches the authoritative-pricing order pipeline. `product_id` is `on delete set null` (not cascade) with `product_name`/`product_slug` snapshotted directly on the row (same convention as `order_items`), so a request survives a later product deletion. `status` (`new`/`contacted`/`fulfilled`/`cancelled`) is admin-managed from `/admin/order-requests`. Same RLS-locked-down, service-role-only shape as `orders`. |
+| `order_requests` | `0018` — pre-order leads captured from the PDP's "Request to Order" button (§17), which replaces the disabled Sold Out button *only there* — grid-card/wishlist Sold Out badges are untouched. Not `orders`/`order_items`: this is a lead, not a priced/paid transaction, so it deliberately never touches the authoritative-pricing order pipeline. `product_id` is `on delete set null` (not cascade) with `product_name`/`product_slug` snapshotted directly on the row (same convention as `order_items`), so a request survives a later product deletion. `status` (`new`/`contacted`/`fulfilled`/`cancelled`) is admin-managed from `/admin/order-requests`. `0019` adds a nullable `user_id` (`references auth.users(id) on delete set null`, same convention as `orders.user_id` — guest submission still fully works) plus the table's **one** client-readable RLS policy, `order_requests_owner_select: auth.uid() = user_id` — everything else on this table still goes through the service-role client. That policy is what backs two customer-facing pieces: the PDP's sold-out button reads "Requested" instead of "Request to Order" on a fresh reload for a signed-in customer who already has one (`hasOrderRequestForProduct`, checked server-side in `app/(site)/product/[slug]/page.tsx` — this is *why* sold-out product pages are no longer fully static, see §19's note), and a new "Order Requests" row on `/account` (`OrderRequestsPanel`, §15) listing a customer's own requests. Verified directly against two real authenticated test users that the policy actually isolates them from each other, not just that it exists. |
 | `schema_migrations` | Migration-runner bookkeeping (§20), not app data — RLS-locked to deny-all via PostgREST (`0004`), reachable only by direct Postgres connection or the service-role client. |
 
 **RLS philosophy** (all policies in `0003_rls.sql`): public `SELECT` on
@@ -1261,6 +1263,67 @@ client-importable can never share a file with server-only logic, even via
 re-export from the tainted file itself — only a direct import from a clean
 module avoids the taint.
 
+**Delivery estimate fetches automatically now**, not on a manual click.
+`checkout-content.tsx`'s Section 3 used to require an explicit "Check
+Delivery Options" button press even after a valid state + PIN were
+already entered. A `useEffect` now watches `canEstimateDelivery`/`form.
+state`/`form.pin`/`subtotal` and fires the same `estimateDelivery()` on
+its own once the address is complete; editing any address field still
+clears the estimate (`update()`/`applySavedAddress()`, unchanged) so the
+effect naturally re-fires on the next valid address. `estimateDelivery`
+itself gained a `try/catch` (a manual "Try Again" button only appears now
+on a genuine fetch failure — there's no button for the normal path).
+**Gotcha worth remembering**: the first version called
+`setEstimating(true)` synchronously inside the effect body (before its
+`await`), which the React Compiler's `set-state-in-effect` lint rule
+correctly flagged — calling setState synchronously within an effect risks
+cascading renders. Fixed by deferring the call one microtask out
+(`Promise.resolve().then(() => estimateDelivery())`) — same visible
+timing to the user (still before paint), just structured the way the rule
+wants. If you add another "fetch automatically when X becomes valid"
+effect anywhere, defer the same way rather than calling an async function
+that sets state synchronously as its first line.
+
+**"Request to Order" for sold-out products** (`components/product/
+add-to-bag-panel.tsx`, `request-to-order-dialog.tsx`, `app/(site)/
+product/actions.ts`) replaces the old disabled "Sold Out" button — grid
+cards and the wishlist keep their own separate Sold Out badge unchanged.
+Opens a dialog (name/phone/email-optional/size/quantity/delivery address)
+that inserts into `order_requests` (§14) via `submitOrderRequestAction`,
+rate-limited (`lib/rate-limit.ts`, bucket `"order-request"`, by IP) and
+re-verifying server-side that the product is real and genuinely sold out
+before accepting — never trusts the client's claim, same discipline as
+checkout's own authoritative pricing. On success the button switches from
+"Request to Order" to "Requested": immediately for anyone via a callback
+the dialog fires back to the panel, and correctly on a fresh page reload
+for a **signed-in** customer specifically, via a server-side check
+(`hasOrderRequestForProduct`, `app/(site)/product/[slug]/page.tsx`) — this
+is why sold-out product pages are no longer fully static (§19 notes the
+same thing from the caching side). A guest's "Requested" state is
+session-scoped only (resets on reload) since there's no reliable identity
+to check against without signing in — not a bug, an inherent limit of not
+being signed in.
+`components/product/request-to-order-dialog.tsx`'s own `<DialogContent>`
+also got a scoped `max-h-[85vh] overflow-y-auto` (the shared `Dialog`
+primitive, `components/ui/dialog.tsx`, has no height/scroll handling of
+its own) plus a two-column field layout (Phone+Email, Size+Quantity) —
+the six-field form was overflowing short mobile viewports with no way to
+reach the rest of it. Scoped via that one component's own `className`
+override, not a change to the shared primitive every other dialog on the
+site also uses.
+
+**Customer-side visibility**: a new "Order Requests" row on `/account`
+(`components/account/order-requests-panel.tsx`, between Orders and
+Wishlist) lists a signed-in customer's own requests — product, size/qty,
+date, a friendly status label. Backed by
+`listOrderRequestsForUser`/`hasOrderRequestForProduct`
+(`lib/repositories/order-requests.ts`), both using the cookie-bound
+client so RLS (`order_requests_owner_select`, §14) does the actual
+enforcement — same shape as `listOrdersForUser`. Verified with two real
+authenticated test accounts, not just that the policy exists: signed in
+as one, confirmed it returns that account's own row and zero rows when
+queried for the other account's.
+
 ## 17. Admin CMS
 
 Fully isolated from the storefront via Next's **multiple-root-layouts**
@@ -1429,6 +1492,17 @@ JSX, so `StaticPage`'s existing CSS (styles any `h2`/`p` it finds inside
 its children) needed no changes. No markdown library added — this covers
 the one structure these two pages actually use, nothing more. The admin
 form shows the convention as inline help text next to the textarea.
+
+`/admin/order-requests` (new `AdminNav` sidebar entry, `ClipboardList`
+icon) — the operator-facing side of "Request to Order" (§14/§16): a
+filterable list (Product, Customer name/phone/email, Size/Qty, Delivery
+Address, Date, Status) with a status dropdown + Update button per row
+(`updateOrderRequestStatusAction`, same "Server Component list page,
+plain-`<form>`-per-row mutation" shape as `setCollectionActiveAction`/
+`setBannerActiveAction` — no client JS needed for the status change).
+`new` → `contacted` → `fulfilled`/`cancelled` is the intended workflow;
+nothing in the app changes behavior based on status besides what's shown
+here and on the customer's own `/account` row for the same request.
 
 **Bulk product selection** (`components/admin/products-table.tsx`, a
 Client Component the Server Component list page hands its already-fetched
