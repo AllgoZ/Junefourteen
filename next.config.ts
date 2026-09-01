@@ -10,10 +10,15 @@ import type { NextConfig } from "next";
  * of them), the Meta Pixel (`fbevents.js` from connect.facebook.net, plus
  * its `/tr/` event beacons to www.facebook.com — sent by both image GET and
  * `navigator.sendBeacon`, hence the host is in img-src *and* connect-src;
- * storefront-only, ARCHITECTURE.md §23), and self-hosted fonts
- * (next/font/google — zero runtime request to Google's own font CDN, so no
- * fonts.gstatic.com entry is needed here, unlike a typical Next+Google-Fonts
- * CSP).
+ * storefront-only, ARCHITECTURE.md §23), Google Analytics 4 (gtag.js from
+ * www.googletagmanager.com, plus its `/g/collect` beacons to
+ * *.google-analytics.com / *.analytics.google.com — the wildcards cover
+ * GA4's regional collection hosts, e.g. region1.*; storefront-only, §23 —
+ * `*.g.doubleclick.net` / `*.google.com` are deliberately NOT listed, only
+ * needed if Google Signals / Ads linking is later enabled), and self-hosted
+ * fonts (next/font/google — zero runtime request to Google's own font CDN,
+ * so no fonts.gstatic.com entry is needed here, unlike a typical
+ * Next+Google-Fonts CSP).
  *
  * `'unsafe-inline'` on **both** script-src and style-src, matching Next's
  * own documented "Without Nonces" CSP pattern exactly
@@ -46,6 +51,7 @@ function buildCsp(): string {
       "'unsafe-inline'",
       "https://checkout.razorpay.com",
       "https://connect.facebook.net",
+      "https://www.googletagmanager.com",
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
@@ -56,6 +62,8 @@ function buildCsp(): string {
       "https://res.cloudinary.com",
       "https://www.facebook.com",
       "https://connect.facebook.net",
+      "https://www.googletagmanager.com",
+      "https://*.google-analytics.com",
     ],
     "font-src": ["'self'"],
     "connect-src": [
@@ -64,6 +72,9 @@ function buildCsp(): string {
       "https://*.razorpay.com",
       "https://www.facebook.com",
       "https://connect.facebook.net",
+      "https://www.googletagmanager.com",
+      "https://*.google-analytics.com",
+      "https://*.analytics.google.com",
       ...(isDev ? ["ws://localhost:*", "http://localhost:*"] : []),
     ],
     // Wide open, deliberately: for a card payment, Razorpay opens a 3D

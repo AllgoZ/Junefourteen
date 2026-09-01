@@ -247,7 +247,9 @@ denying camera/microphone/geolocation (unused by this app) and
 `frame-ancestors 'self'`. The CSP was built from an audit of every actual
 external resource this app loads (Supabase, Cloudinary, Razorpay Checkout,
 the Meta Pixel — `connect.facebook.net` script + `www.facebook.com` `/tr/`
-beacons, storefront-only, `ARCHITECTURE.md` §23 — and self-hosted fonts)
+beacons — Google Analytics 4 — `www.googletagmanager.com` script +
+`*.google-analytics.com`/`*.analytics.google.com` `/g/collect` beacons —
+both storefront-only, `ARCHITECTURE.md` §23 — and self-hosted fonts)
 rather than a generic template. **`script-src` includes
 `'unsafe-inline'`** — required by Next's own documented non-nonce CSP
 pattern, since Next inlines its hydration/RSC-streaming payload as

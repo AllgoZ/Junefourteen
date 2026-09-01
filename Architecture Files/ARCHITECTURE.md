@@ -1664,6 +1664,8 @@ RAZORPAY_WEBHOOK_SECRET                  # server-only, §22 — signs the raw w
                                           # Set from the Razorpay Dashboard's Webhooks page, per mode (test/live).
 NEXT_PUBLIC_META_PIXEL_ID                # optional — Meta Pixel id for the storefront (§23). Not a secret;
                                           # leave unset to ship zero tracking code. Storefront-only.
+NEXT_PUBLIC_GA_MEASUREMENT_ID            # optional — Google Analytics 4 measurement id (G-…) for the
+                                          # storefront (§23). Not a secret; leave unset to ship no GA code.
 ```
 
 **Migrations** (`supabase/migrations/*.sql`, numbered, applied in order):
@@ -1686,7 +1688,8 @@ client, bypasses the `profiles.role` change guard, §14) to flip that one
 account to `role = "admin"`.
 
 **Deployment checklist**: set all seven required env vars above in the hosting
-platform (plus `NEXT_PUBLIC_META_PIXEL_ID` if using the Meta Pixel, §23);
+platform (plus `NEXT_PUBLIC_META_PIXEL_ID` / `NEXT_PUBLIC_GA_MEASUREMENT_ID`
+if using the Meta Pixel / Google Analytics, §23);
 run migrations + seed once against the target Supabase project;
 promote at least one admin account; confirm Supabase Auth's redirect
 URLs/allowed origins include the production domain; `npm run build` clean
@@ -1735,10 +1738,11 @@ upload validation, the React Compiler).
 - **SEO** (sitemap, robots, metadata strategy) — explicitly out of scope for
   the §22 hardening pass per its own brief; still open, to be handled
   separately.
-- **Analytics beyond a Meta Pixel `PageView`** — the pixel is wired in (§23)
-  but only tracks `PageView`; no custom conversion events (`AddToCart`,
-  `InitiateCheckout`, `Purchase`), no GA4, no Meta Conversions API / server
-  events.
+- **Analytics beyond pageviews** — the Meta Pixel and Google Analytics 4 are
+  both wired in (§23) but track pageviews only; no custom / ecommerce events
+  (`AddToCart`/`InitiateCheckout`/`Purchase`, GA4 `view_item`/`add_to_cart`/
+  `purchase`), no Meta Conversions API, no GA4 Measurement Protocol / server
+  tagging, no Google Ads / Signals linking.
 - See `SECURITY.md`'s findings table and `OPTIMIZATION.md`'s findings table
   for anything not listed here — both were re-checked as part of §22 and
   now mark each finding's actual status rather than leaving it open-ended.
@@ -1956,11 +1960,17 @@ visually confirm, and a real Razorpay test-mode webhook delivery (once
 exercise the webhook's happy path end-to-end, which wasn't possible here
 without that secret existing yet.
 
-## 23. Analytics (Meta Pixel)
+## 23. Analytics (Meta Pixel + Google Analytics)
 
-The **only** analytics/tracking on the site. Added on direct request from
-the raw Meta Events Manager base snippet — an explicitly additive change,
-no existing component/route/style/DB touched.
+The two analytics integrations on the site — a **Meta (Facebook) Pixel** and
+**Google Analytics 4** (gtag.js). Both were added from the vendors' own base
+snippets on direct request, both are explicitly additive (no existing
+component/route/style/DB touched), both live in `components/analytics/`,
+both mount only in `app/(site)/layout.tsx` (never `/admin/*` — separate root
+layout, §17), and both are env-var-gated so an unconfigured environment
+ships zero tracking code.
+
+### Meta Pixel
 
 - **`components/analytics/meta-pixel.tsx`** (Client Component) — mounted once
   in `app/(site)/layout.tsx`, directly inside `<body>` above `<CartProvider>`.
@@ -1997,3 +2007,35 @@ no existing component/route/style/DB touched.
   call sites in the relevant client components), not a rework.
 - **`Window.fbq` global type** is declared in the component file itself,
   same pattern as `lib/payments/razorpay-client.ts`'s `Window.Razorpay`.
+
+### Google Analytics 4
+
+- **`components/analytics/google-analytics.tsx`** (**Server Component** — no
+  `"use client"`, no hooks) — mounted in `app/(site)/layout.tsx` directly
+  after `<MetaPixel />`. Renders two `next/script`
+  `strategy="afterInteractive"` tags: the async `gtag/js?id=<id>` loader and
+  the inline `dataLayer`/`gtag`/`gtag('js', …)`/`gtag('config', <id>)`
+  init — the verbatim GA4 snippet.
+- **Env-var gated.** `NEXT_PUBLIC_GA_MEASUREMENT_ID` (§20 — not a secret).
+  Unset → returns `null`, zero analytics code. The live id is `G-SGB4B86KW1`
+  (stream `https://www.junefourteen.in/`), set in the hosting platform.
+- **SPA pageviews via GA4 Enhanced Measurement, not a manual hook.**
+  `gtag('config', …)` sends the first `page_view`; client-side route changes
+  are counted by GA4's built-in "page changes based on browser history
+  events" (Enhanced Measurement, on by default for new properties — Next's
+  own docs and `@next/third-parties` both rely on this). This is *why* the
+  component needs no client hook, unlike the Pixel — Meta has no equivalent
+  history-based auto-pageview. Firing `page_view` manually here would need
+  `send_page_view: false` and would double-count if Enhanced Measurement
+  stays on, so it is deliberately **not** done.
+- **CSP.** `next.config.ts#buildCsp()` gained `www.googletagmanager.com` in
+  `script-src`; `www.googletagmanager.com` + `https://*.google-analytics.com`
+  in `img-src`; and those two plus `https://*.analytics.google.com` in
+  `connect-src` (the `/g/collect` beacons; the wildcards cover GA4's regional
+  hosts like `region1.google-analytics.com`). `*.g.doubleclick.net` /
+  `*.google.com` are **not** listed — only needed if Google Signals / Ads
+  linking is enabled later (noted as the follow-up then). `SECURITY.md` §7.
+- **Pageviews only.** No GA4 custom or ecommerce events (`view_item`,
+  `add_to_cart`, `purchase`), no Measurement Protocol / server-side tagging,
+  no Google Ads linking — same "add later as a contained change" position as
+  the Pixel's custom events.
