@@ -598,6 +598,7 @@ export interface Database {
           product_id: string | null;
           product_name: string;
           product_slug: string;
+          user_id: string | null;
           customer_name: string;
           phone: string;
           email: string | null;
@@ -612,6 +613,7 @@ export interface Database {
           product_id?: string | null;
           product_name: string;
           product_slug: string;
+          user_id?: string | null;
           customer_name: string;
           phone: string;
           email?: string | null;

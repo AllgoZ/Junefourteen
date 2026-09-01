@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { MapPin, Package, User as UserIcon, Heart } from "lucide-react";
+import { MapPin, Package, User as UserIcon, Heart, ClipboardList } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -10,11 +10,13 @@ import { Container } from "@/components/layout/container";
 import { WishlistSummary } from "@/components/account/wishlist-summary";
 import { AccountAuthForms } from "@/components/account/auth-forms";
 import { OrdersPanel } from "@/components/account/orders-panel";
+import { OrderRequestsPanel } from "@/components/account/order-requests-panel";
 import { AddressesPanel } from "@/components/account/addresses-panel";
 import { ProfilePanel } from "@/components/account/profile-panel";
 import { verifySession, getCurrentProfile } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { listOrdersForUser } from "@/lib/repositories/orders";
+import { listOrderRequestsForUser } from "@/lib/repositories/order-requests";
 import { listAddressesForUser } from "@/lib/repositories/addresses";
 
 export const metadata: Metadata = {
@@ -23,6 +25,7 @@ export const metadata: Metadata = {
 
 const ROWS = [
   { value: "orders", icon: Package, label: "Orders" },
+  { value: "requests", icon: ClipboardList, label: "Order Requests" },
   { value: "wishlist", icon: Heart, label: "Wishlist" },
   { value: "addresses", icon: MapPin, label: "Addresses" },
   { value: "profile", icon: UserIcon, label: "Profile" },
@@ -44,9 +47,10 @@ export default async function AccountPage() {
   }
 
   const supabase = await createClient();
-  const [profile, orders, addresses] = await Promise.all([
+  const [profile, orders, orderRequests, addresses] = await Promise.all([
     getCurrentProfile(),
     listOrdersForUser(supabase, user.id),
+    listOrderRequestsForUser(supabase, user.id),
     listAddressesForUser(supabase, user.id),
   ]);
 
@@ -66,6 +70,7 @@ export default async function AccountPage() {
             </AccordionTrigger>
             <AccordionContent className="pb-2">
               {value === "orders" && <OrdersPanel orders={orders} />}
+              {value === "requests" && <OrderRequestsPanel requests={orderRequests} />}
               {value === "wishlist" && <WishlistSummary />}
               {value === "addresses" && <AddressesPanel addresses={addresses} />}
               {value === "profile" && (

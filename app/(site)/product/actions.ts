@@ -5,6 +5,7 @@ import { getProductsForPricing } from "@/lib/repositories/products";
 import { createOrderRequest } from "@/lib/repositories/order-requests";
 import { validateMobile, normalizePhone, isValidEmail } from "@/lib/validation";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { verifySession } from "@/lib/auth/dal";
 
 export interface OrderRequestFormState {
   errors?: {
@@ -56,11 +57,13 @@ export async function submitOrderRequestAction(
   }
 
   try {
+    const user = await verifySession();
     const admin = createAdminClient();
     await createOrderRequest(admin, {
       productId: product.id,
       productName: product.name,
       productSlug: product.slug,
+      userId: user?.id ?? null,
       customerName,
       phone: normalizePhone(phoneRaw),
       email: emailRaw || null,

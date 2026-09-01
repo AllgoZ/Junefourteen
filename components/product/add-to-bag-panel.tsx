@@ -31,7 +31,14 @@ const SECONDARY_CTA =
 const STICKY_CTA =
   "h-12 rounded-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_10px_24px_-10px_rgba(0,0,0,0.5)] transition-[transform,box-shadow,background-color] duration-150 ease-out hover:bg-foreground-secondary active:scale-[0.97] active:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_3px_10px_-6px_rgba(0,0,0,0.4)]";
 
-export function AddToBagPanel({ product }: { product: Product }) {
+export function AddToBagPanel({
+  product,
+  alreadyRequested = false,
+}: {
+  product: Product;
+  /** Whether the signed-in customer already has a pending request for this product — determined server-side (§ page.tsx) so it's correct on a fresh load, not just for the current browser session. */
+  alreadyRequested?: boolean;
+}) {
   const router = useRouter();
   const { addItem, openCart } = useCart();
 
@@ -54,6 +61,7 @@ export function AddToBagPanel({ product }: { product: Product }) {
   const [mobileSignupOpen, setMobileSignupOpen] = useState(false);
   const pendingCheckoutRef = useRef(false);
   const [requestToOrderOpen, setRequestToOrderOpen] = useState(false);
+  const [requested, setRequested] = useState(alreadyRequested);
 
   function handleMobileSignupOpenChange(open: boolean) {
     setMobileSignupOpen(open);
@@ -201,7 +209,7 @@ export function AddToBagPanel({ product }: { product: Product }) {
             onClick={() => setRequestToOrderOpen(true)}
             className={cn("h-14 w-full rounded-2xl text-base", PRIMARY_CTA)}
           >
-            Request to Order
+            {requested ? "Requested" : "Request to Order"}
           </Button>
         ) : (
           <div className="flex gap-3">
@@ -261,6 +269,7 @@ export function AddToBagPanel({ product }: { product: Product }) {
           onOpenChange={setRequestToOrderOpen}
           productId={product.id}
           sizes={product.sizes}
+          onSuccess={() => setRequested(true)}
         />
       )}
     </div>

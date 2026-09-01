@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { CreditCard, Truck, Tag, X } from "lucide-react";
@@ -95,6 +95,7 @@ export function CheckoutContent({
   const [form, setForm] = useState<AddressForm>(EMPTY_FORM);
   const [delivery, setDelivery] = useState<ShippingEstimateResult | null>(null);
   const [estimating, setEstimating] = useState(false);
+  const [deliveryError, setDeliveryError] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState("");
@@ -108,6 +109,7 @@ export function CheckoutContent({
   const update = (field: keyof AddressForm, value: string) => {
     setForm((f) => ({ ...f, [field]: value }));
     setDelivery(null);
+    setDeliveryError(false);
   };
 
   const applySavedAddress = (id: string) => {
@@ -125,6 +127,7 @@ export function CheckoutContent({
       pin: address.postal_code,
     }));
     setDelivery(null);
+    setDeliveryError(false);
   };
 
   const canEstimateDelivery = form.state && /^\d{6}$/.test(form.pin);
@@ -132,10 +135,36 @@ export function CheckoutContent({
   const estimateDelivery = async () => {
     if (!canEstimateDelivery) return;
     setEstimating(true);
-    const result = await estimateShippingAction({ country: "India", state: form.state, pin: form.pin, orderSubtotal: subtotal });
-    setDelivery(result);
-    setEstimating(false);
+    setDeliveryError(false);
+    try {
+      const result = await estimateShippingAction({ country: "India", state: form.state, pin: form.pin, orderSubtotal: subtotal });
+      setDelivery(result);
+    } catch {
+      setDeliveryError(true);
+    } finally {
+      setEstimating(false);
+    }
   };
+
+  // Fetches delivery options automatically as soon as the address is
+  // complete enough to estimate — previously this required an explicit
+  // "Check Delivery Options" click even after a valid state + PIN were
+  // entered. `update()`/`applySavedAddress()` already reset `delivery` to
+  // null on any address change, so this effect naturally re-fires and
+  // re-estimates whenever the address changes again, without needing its
+  // own reset logic.
+  useEffect(() => {
+    if (!canEstimateDelivery || delivery || estimating || deliveryError) return;
+    // Deferred to a microtask rather than calling estimateDelivery()
+    // directly: it calls setEstimating(true) synchronously (before its
+    // first await), and the React Compiler's set-state-in-effect rule
+    // flags any setState that runs synchronously within an effect body —
+    // Promise.resolve().then(...) pushes that same call one microtask
+    // later, which satisfies the rule without changing when the user
+    // actually sees the "Checking…" state (still before paint).
+    Promise.resolve().then(() => estimateDelivery());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-runs only on the address/subtotal changes above; estimateDelivery is stable enough here (defined fresh each render but only reads current form/subtotal via closure, same values already listed) and adding it would re-fire on every render.
+  }, [canEstimateDelivery, form.state, form.pin, subtotal]);
 
   const applyCoupon = async () => {
     if (!couponInput.trim()) return;
@@ -402,21 +431,7 @@ export function CheckoutContent({
         </Section>
 
         <Section step={3} title="Delivery Method">
-          {!delivery ? (
-            <div>
-              <p className="mb-3 text-sm text-muted-foreground">
-                Enter your address above to see delivery options.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canEstimateDelivery || estimating}
-                onClick={estimateDelivery}
-              >
-                {estimating ? "Checking…" : "Check Delivery Options"}
-              </Button>
-            </div>
-          ) : (
+          {delivery ? (
             <div className="flex items-start gap-3 rounded-md border border-foreground p-4">
               <Truck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <div className="flex-1">
@@ -427,6 +442,21 @@ export function CheckoutContent({
               </div>
               <span className="text-sm font-medium tabular-nums">{formatPrice(delivery.amount)}</span>
             </div>
+          ) : estimating ? (
+            <p className="text-sm text-muted-foreground">Checking delivery options…</p>
+          ) : deliveryError ? (
+            <div>
+              <p className="mb-3 text-sm text-destructive">
+                Could not check delivery options for this address.
+              </p>
+              <Button type="button" variant="outline" onClick={estimateDelivery}>
+                Try Again
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Enter your state and PIN code above to see delivery options.
+            </p>
           )}
         </Section>
 

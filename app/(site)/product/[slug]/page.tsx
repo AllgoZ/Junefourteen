@@ -12,6 +12,18 @@ import {
   getProducts,
   getRelatedProducts,
 } from "@/lib/services/products";
+import { verifySession } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
+import { hasOrderRequestForProduct } from "@/lib/repositories/order-requests";
+
+/** Only relevant for a sold-out product, and only for a signed-in customer — this is what lets the "Request to Order" button correctly read "Requested" on a fresh page load, not just for the current browser session. */
+async function getAlreadyRequested(productId: string, isSoldOut: boolean): Promise<boolean> {
+  if (!isSoldOut) return false;
+  const user = await verifySession();
+  if (!user) return false;
+  const supabase = await createClient();
+  return hasOrderRequestForProduct(supabase, user.id, productId);
+}
 
 export async function generateStaticParams() {
   const products = await getProducts();
@@ -39,7 +51,10 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const related = await getRelatedProducts(product, 4);
+  const [related, alreadyRequested] = await Promise.all([
+    getRelatedProducts(product, 4),
+    getAlreadyRequested(product.id, Boolean(product.isSoldOut)),
+  ]);
 
   return (
     <div>
@@ -57,7 +72,7 @@ export default async function ProductPage({ params }: PageProps<"/product/[slug]
       <Container className="grid grid-cols-1 gap-10 py-6 lg:grid-cols-[1.3fr_1fr] lg:gap-16 lg:py-10">
         <ProductGallery images={product.images} productName={product.name} />
         <div className="lg:sticky lg:top-24 lg:self-start">
-          <AddToBagPanel product={product} />
+          <AddToBagPanel product={product} alreadyRequested={alreadyRequested} />
           <div className="mt-12">
             <ProductInfoAccordion product={product} />
           </div>
