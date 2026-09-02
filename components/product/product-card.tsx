@@ -47,7 +47,7 @@ export function ProductCard({ product, priority, className, dark = false }: Prod
 
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-2.5">
           {product.isSoldOut ? (
-            <span className="rounded-sm bg-background/45 px-1.5 py-0.5 text-[10px] font-medium tracking-[0.14em] text-destructive uppercase">
+            <span className="rounded-sm bg-background/45 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-destructive uppercase">
               Sold Out
             </span>
           ) : product.isNew ? (

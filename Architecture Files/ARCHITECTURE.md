@@ -697,12 +697,14 @@ take effect — `next.config.ts` isn't hot-reloaded.
   longer does, so grid cards now render identically to PDP/cart on this
   point — one shared component, no divergent behavior to maintain). Badge
   slot (top-left) is priority-ordered: `isSoldOut` → red (`text-destructive`)
-  "Sold Out" text on a small, deliberately subtle `bg-background/45`
-  chip (`rounded-sm`, no blur, no shadow) — sized and toned specifically to
-  not compete with the product photo, replacing an earlier fully
-  transparent (no background at all) version and, before that, a heavier
-  glassmorphic white/gradient pill with `backdrop-blur-sm` — both changes
-  came from direct feedback, don't reintroduce either. The top dark
+  "Sold Out" text (`text-[9px]`, `tracking-[0.12em]`, `px-1 py-0.5` — nudged
+  down a step from `text-[10px]`/`0.14em`/`px-1.5` on direct feedback that
+  the chip read a touch large) on a small, deliberately subtle
+  `bg-background/45` chip (`rounded-sm`, no blur, no shadow) — sized and
+  toned specifically to not compete with the product photo, replacing an
+  earlier fully transparent (no background at all) version and, before
+  that, a heavier glassmorphic white/gradient pill with `backdrop-blur-sm`
+  — both changes came from direct feedback, don't reintroduce either. The top dark
   gradient scrim (`from-black/30`) used for `isNew`/`compareAtPrice`
   legibility is *not* shown for `isSoldOut` — its own chip background
   already provides contrast, and stacking both would undercut "subtle."
