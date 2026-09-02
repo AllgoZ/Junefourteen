@@ -248,11 +248,12 @@ export function CheckoutContent({
 
     setPlacing(true);
     const result = await createOrderAction(
-      items.map(({ productId, size, sleeve, customMeasurements, quantity }) => ({
+      items.map(({ productId, size, sleeve, customMeasurements, selectedPieceIds, quantity }) => ({
         productId,
         size,
         sleeve,
         customMeasurements,
+        selectedPieceIds,
         quantity,
       })),
       { ...form },
@@ -515,6 +516,8 @@ export function CheckoutContent({
               <div className="flex-1">
                 <p className="text-sm text-foreground">{item.name}</p>
                 <p className="text-xs text-muted-foreground">
+                  {item.selectedPieces && item.selectedPieces}
+                  {item.selectedPieces && (item.size || item.customMeasurements) && " · "}
                   {item.size && `Size ${item.size}`}
                   {item.customMeasurements && "Custom Size"}
                 </p>

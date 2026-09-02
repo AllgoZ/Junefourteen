@@ -38,7 +38,10 @@ export async function getCartForCurrentUser(): Promise<CartItem[]> {
  * result so the client can replace its local cache in one round trip.
  */
 export async function mergeGuestCart(
-  guestItems: Pick<CartItem, "productId" | "size" | "sleeve" | "customMeasurements" | "quantity">[]
+  guestItems: Pick<
+    CartItem,
+    "productId" | "size" | "sleeve" | "customMeasurements" | "selectedPieceIds" | "quantity"
+  >[]
 ): Promise<CartItem[]> {
   const ctx = await getAuthedCartId();
   if (!ctx) return [];
@@ -49,6 +52,7 @@ export async function mergeGuestCart(
       size: item.size,
       sleeveOption: item.sleeve,
       customMeasurements: item.customMeasurements as Json | undefined,
+      selectedPieceIds: item.selectedPieceIds,
       quantity: item.quantity,
     };
     await addCartItem(ctx.supabase, ctx.cartId, input);
@@ -59,7 +63,7 @@ export async function mergeGuestCart(
 }
 
 export async function addCartItemAction(
-  item: Pick<CartItem, "productId" | "size" | "sleeve" | "customMeasurements">,
+  item: Pick<CartItem, "productId" | "size" | "sleeve" | "customMeasurements" | "selectedPieceIds">,
   quantity: number
 ): Promise<void> {
   const ctx = await getAuthedCartId();
@@ -69,6 +73,7 @@ export async function addCartItemAction(
     size: item.size,
     sleeveOption: item.sleeve,
     customMeasurements: item.customMeasurements as Json | undefined,
+    selectedPieceIds: item.selectedPieceIds,
     quantity,
   });
 }

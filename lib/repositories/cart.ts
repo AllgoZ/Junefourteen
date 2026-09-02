@@ -11,6 +11,7 @@ export interface CartItemWithProduct extends CartItemRow {
     compare_at_price: number | null;
     is_sold_out: boolean;
     product_images: { id: string; image_url: string; alt: string; tone: number; sort_order: number }[];
+    product_pieces: { id: string; name: string; price: number; sort_order: number }[];
   } | null;
 }
 
@@ -31,7 +32,8 @@ const CART_ITEM_SELECT = `
   *,
   products (
     slug, name, price, compare_at_price, is_sold_out,
-    product_images ( id, image_url, alt, tone, sort_order )
+    product_images ( id, image_url, alt, tone, sort_order ),
+    product_pieces ( id, name, price, sort_order )
   )
 `;
 
@@ -54,15 +56,25 @@ export interface CartItemInput {
   size?: string;
   sleeveOption?: string;
   customMeasurements?: Json;
+  selectedPieceIds?: string[];
   quantity: number;
+}
+
+/** Deterministic key for a set of piece ids — sorted so order doesn't matter. */
+function pieceKey(ids: readonly string[] | null | undefined): string {
+  return ids && ids.length ? [...ids].map(String).sort().join(",") : "";
 }
 
 function matchesLine(row: CartItemRow, item: CartItemInput): boolean {
   if (row.custom_measurements !== null || item.customMeasurements) return false;
+  const rowPieceIds = Array.isArray(row.selected_piece_ids)
+    ? (row.selected_piece_ids as unknown[]).map(String)
+    : null;
   return (
     row.product_id === item.productId &&
     (row.size ?? null) === (item.size ?? null) &&
-    (row.sleeve_option ?? null) === (item.sleeveOption ?? null)
+    (row.sleeve_option ?? null) === (item.sleeveOption ?? null) &&
+    pieceKey(rowPieceIds) === pieceKey(item.selectedPieceIds)
   );
 }
 
@@ -103,6 +115,7 @@ export async function addCartItem(
     size: item.size ?? null,
     sleeve_option: item.sleeveOption ?? null,
     custom_measurements: item.customMeasurements ?? null,
+    selected_piece_ids: item.selectedPieceIds?.length ? (item.selectedPieceIds as unknown as Json) : null,
     quantity: item.quantity,
   });
   if (error) throw new Error(`addCartItem (insert): ${error.message}`);

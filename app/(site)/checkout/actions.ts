@@ -76,7 +76,10 @@ export interface CreateOrderResult {
  * cart intact for a retry.
  */
 export async function createOrderAction(
-  cartItems: Pick<CartItem, "productId" | "size" | "sleeve" | "customMeasurements" | "quantity">[],
+  cartItems: Pick<
+    CartItem,
+    "productId" | "size" | "sleeve" | "customMeasurements" | "selectedPieceIds" | "quantity"
+  >[],
   address: CheckoutAddressInput,
   options: { saveAddress?: boolean; couponCode?: string } = {}
 ): Promise<CreateOrderResult> {
@@ -115,16 +118,36 @@ export async function createOrderAction(
     if (product.isSoldOut) {
       return { error: `${product.name} just sold out. Please remove it from your bag.` };
     }
+
+    // Per-piece product: the charged unit price is the server-side sum of the
+    // selected pieces — the client-supplied line price is never read (backend
+    // brief §21).
+    let unitPrice = product.price;
+    let selectedPieces: string | null = null;
+    if (product.pieces.length > 0) {
+      const activeById = new Map(product.pieces.filter((p) => p.isActive).map((p) => [p.id, p]));
+      const chosen = (line.selectedPieceIds ?? []).map((id) => activeById.get(id));
+      if (chosen.length === 0 || chosen.some((p) => !p)) {
+        return { error: `Please re-select the pieces for ${product.name} in your bag.` };
+      }
+      const chosenPieces = (chosen as NonNullable<(typeof chosen)[number]>[]).sort(
+        (a, b) => a.sortOrder - b.sortOrder
+      );
+      unitPrice = chosenPieces.reduce((sum, p) => sum + p.price, 0);
+      selectedPieces = chosenPieces.map((p) => p.name).join(" + ");
+    }
+
     orderItems.push({
       productId: product.id,
       productName: product.name,
       productSlug: product.slug,
       productImage: product.imageUrl,
-      unitPrice: product.price,
+      unitPrice,
       quantity: line.quantity,
       selectedSize: line.size,
       selectedSleeveOption: line.sleeve,
       customMeasurements: (line.customMeasurements as unknown as NewOrderItem["customMeasurements"]) ?? null,
+      selectedPieces,
     });
   }
 

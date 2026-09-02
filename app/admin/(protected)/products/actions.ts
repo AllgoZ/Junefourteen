@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createProductForAdmin,
   updateProductForAdmin,
+  getProductForAdmin,
   setProductActive,
   bulkSetProductActive,
   getProductIdsWithOrders,
@@ -16,6 +17,7 @@ import {
   deleteProductImageRow,
   reorderProductImages,
   type ProductFormInput,
+  type ProductPieceInput,
 } from "@/lib/repositories/admin/products";
 import { uploadImage, deleteImage } from "@/lib/cloudinary/admin";
 import { validateImageFile } from "@/lib/cloudinary/validate-image";
@@ -47,6 +49,33 @@ function splitCommas(value: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * The product form serialises its repeatable "Pieces" list to a hidden JSON
+ * input. Parse defensively — a malformed value just yields an empty list
+ * (product stays single-price) rather than throwing.
+ */
+function parsePieces(raw: string): ProductPieceInput[] {
+  if (!raw.trim()) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const pieces: ProductPieceInput[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const name = String(e.name ?? "").trim();
+    const price = Number(e.price);
+    if (!name || !Number.isFinite(price) || price < 0) continue;
+    const id = typeof e.id === "string" && e.id ? e.id : undefined;
+    pieces.push({ id, name, price, defaultSelected: e.defaultSelected !== false });
+  }
+  return pieces;
+}
+
 export async function saveProductAction(
   _prevState: ProductFormState,
   formData: FormData
@@ -70,6 +99,34 @@ export async function saveProductAction(
 
   const compareAtPriceRaw = String(formData.get("compareAtPrice") ?? "").trim();
 
+  const admin = createAdminClient();
+
+  // Size-chart image — same single-image handling as saveCollectionAction:
+  // carry the existing asset forward, replace it on a new upload, or clear it
+  // on the "remove" checkbox.
+  const existing = id ? await getProductForAdmin(admin, id) : null;
+  let sizeChartImageUrl = existing?.sizeChartImageUrl ?? null;
+  let sizeChartCloudinaryPublicId = existing?.sizeChartCloudinaryPublicId ?? null;
+  let sizeChartImageAlt = existing?.sizeChartImageAlt ?? null;
+
+  const chartFile = formData.get("sizeChartImage");
+  if (chartFile instanceof File && chartFile.size > 0) {
+    const buffer = Buffer.from(await chartFile.arrayBuffer());
+    const validation = validateImageFile(chartFile, buffer);
+    if (!validation.valid) return { error: validation.error };
+    const uploaded = await uploadImage(buffer, "size-charts");
+    if (sizeChartCloudinaryPublicId) await deleteImage(sizeChartCloudinaryPublicId).catch(() => {});
+    sizeChartImageUrl = uploaded.url;
+    sizeChartCloudinaryPublicId = uploaded.publicId;
+  } else if (formData.get("removeSizeChartImage") === "on") {
+    if (sizeChartCloudinaryPublicId) await deleteImage(sizeChartCloudinaryPublicId).catch(() => {});
+    sizeChartImageUrl = null;
+    sizeChartCloudinaryPublicId = null;
+  }
+
+  const sizeChartAltRaw = String(formData.get("sizeChartImageAlt") ?? "").trim();
+  sizeChartImageAlt = sizeChartImageUrl ? sizeChartAltRaw || `${name} size chart` : null;
+
   const input: ProductFormInput = {
     slug,
     name,
@@ -91,12 +148,14 @@ export async function saveProductAction(
     sortOrder: Number(formData.get("sortOrder") ?? 0) || 0,
     stockQuantity: Math.max(0, Number(formData.get("stockQuantity") ?? 0) || 0),
     lowStockThreshold: Math.max(0, Number(formData.get("lowStockThreshold") ?? 5) || 0),
+    sizeChartImageUrl,
+    sizeChartCloudinaryPublicId,
+    sizeChartImageAlt,
     sizes: formData.getAll("sizes").map(String),
     sleeveOptions: formData.getAll("sleeveOptions").map(String),
+    pieces: parsePieces(String(formData.get("pieces") ?? "")),
     collectionIds: formData.getAll("collectionIds").map(String),
   };
-
-  const admin = createAdminClient();
 
   try {
     const productId = id

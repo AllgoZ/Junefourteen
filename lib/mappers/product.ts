@@ -32,6 +32,15 @@ export function dbProductToProduct(row: ProductRow): Product {
     sleeveOptions: row.product_sleeve_options.length
       ? bySortOrder(row.product_sleeve_options).map((s) => s.sleeve_option as SleeveOption)
       : undefined,
+    pieces: (() => {
+      const active = bySortOrder(row.product_pieces.filter((p) => p.is_active));
+      return active.length
+        ? active.map((p) => ({ id: p.id, name: p.name, price: p.price, defaultSelected: p.default_selected }))
+        : undefined;
+    })(),
+    sizeChartImage: row.size_chart_image_url
+      ? { src: row.size_chart_image_url, alt: row.size_chart_image_alt ?? "" }
+      : undefined,
     supportsCustomSize: row.custom_size_enabled,
     fabric: row.fabric,
     washCare: row.wash_care,

@@ -40,6 +40,7 @@ export function CartLineItem({ item }: { item: CartItem }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {item.selectedPieces && <span>{item.selectedPieces}</span>}
             {item.size && <span>Size {item.size}</span>}
             {item.sleeve && <span>· {item.sleeve}</span>}
             {item.customMeasurements && (

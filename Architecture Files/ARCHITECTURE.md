@@ -1014,8 +1014,14 @@ email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0013_shipping_coupons_tax.sql`, `0014_homepage_media.sql`,
 `0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`,
 `0017_legal_pages.sql`, `0018_order_requests.sql`,
-`0019_order_requests_user_id.sql`
-— `0008`/`0011`/`0012`/`0019` are plain `alter table` additions with no new table,
+`0019_order_requests_user_id.sql`, `0020_product_size_chart.sql`,
+`0021_product_pieces.sql`
+— `0008`/`0011`/`0012`/`0019`/`0020` are plain `alter table` additions with no new table
+(`0020` adds `products.size_chart_image_url`/`_cloudinary_public_id`/`_image_alt`
+— an optional per-product size-chart image, §17),
+`0021` adds the `product_pieces` child table plus
+`cart_items.selected_piece_ids`/`order_items.selected_pieces` and recreates
+`cart_items_line_identity_idx` (per-piece pricing, §16/§17),
 `0009` renames `banners`' original image columns to `desktop_*` and adds a
 parallel optional `mobile_*` set, `0010` adds banners' optional
 overlay-copy columns, `0013` adds `shipping_zones`/`coupons`/`tax_settings`
@@ -1033,12 +1039,13 @@ and `everyday-edit`), which a single FK can't represent.
 |---|---|
 | `profiles` | `id` = `auth.users.id`. `role` (`customer`/`admin`), `email` (denormalized copy of `auth.users.email`, added in `0005` so the admin customers list is one query — §17). Auto-created by the `handle_new_user()` trigger on signup. |
 | `collections` | Matches the `Collection` type exactly, including `tone` (placeholder gradient seed) which the brief's own suggested schema omitted. |
-| `products` | Matches `Product`. `category`/`tags`/`wash_care` stay flat text/`text[]` columns (no separate lookup tables) — matches how the domain type already treats them. `0008` adds `stock_quantity`/`low_stock_threshold` (both `integer not null check (>= 0)`) — deliberately independent of `is_sold_out`, which stays the sole storefront purchase-gating flag; stock is admin-visible inventory tracking only (§17), not wired to auto-disable purchasing. |
+| `products` | Matches `Product`. `category`/`tags`/`wash_care` stay flat text/`text[]` columns (no separate lookup tables) — matches how the domain type already treats them. `0008` adds `stock_quantity`/`low_stock_threshold` (both `integer not null check (>= 0)`) — deliberately independent of `is_sold_out`, which stays the sole storefront purchase-gating flag; stock is admin-visible inventory tracking only (§17), not wired to auto-disable purchasing. `0020` adds `size_chart_image_url`/`size_chart_cloudinary_public_id`/`size_chart_image_alt` (all nullable) — an optional per-product size-chart image, same single-image shape as `collections.image_url`; when set, the PDP's "Size Guide" popup shows just that image instead of the generic table (§17). |
 | `product_collections`, `product_images`, `product_sizes`, `product_sleeve_options` | Children of `products`, `on delete cascade`. |
+| `product_pieces` | `0021` — per-piece product pricing (a kurta set sold as Top / Bottom / Dupatta). Plain child table like `product_sizes`: `name`, `price`, `default_selected` (ticked when the PDP first loads), `sort_order`, `is_active`. A product with zero rows here behaves exactly as before (one `products.price`); with rows, the customer ticks a subset (≥1) and the charged price is the **server-computed sum** of the ticked pieces — never the client's line price (§16). Public-read RLS gated on the parent product being active, same as `product_images`; admin writes via the service-role client, id-preserving reconcile (`reconcileProductPieces`) so `cart_items.selected_piece_ids` stays valid across a product save. |
 | `banners` | Homepage hero carousel slides (`0006`, reshaped by `0009` and `0010`). Each row is one slide with **two independent images** — `desktop_image_url`/`desktop_image_alt`/`desktop_cloudinary_public_id`/`desktop_object_position` (the required horizontal/laptop photo) and `mobile_image_url`/`mobile_image_alt`/`mobile_cloudinary_public_id`/`mobile_object_position` (an optional, genuinely different vertical/mobile photo — not just a different crop of the desktop one; falls back to the desktop image + `mobile_object_position` when absent). Both `object_position` columns are CSS `object-position` strings (e.g. `"50% 35%"`); a manually pasted image URL (vs. a Cloudinary upload) leaves the matching `cloudinary_public_id` null. `0010` added optional overlay copy — `badge_text`, `headline` (required in the admin UI, stored `not null default ''`), `subheading`, `primary_cta_text`/`primary_cta_href` (renamed from `link_label`/`link_href`), `secondary_cta_text`/`secondary_cta_href`, `offer_badge_text` — all opt-in on the storefront (§17). Also `tone` (placeholder-gradient seed, same convention as `collections.tone`)/`sort_order`/`is_active` — multiple active rows is how the carousel gets more than one slide. Public-read policy on `is_active = true` rows, same shape as `collections`. Unlike every other admin-managed table, banners get a genuine hard delete (§17) since nothing else references a banner row. |
 | `social_links` | Footer/Instagram-grid social links (`0007`) — `label`/`href`/`sort_order`/`is_active`. Replace-all-on-save from the admin (§17), not per-row CRUD. |
-| `addresses`, `carts`, `cart_items`, `wishlist_items` | Owner-scoped via RLS. `cart_items` has a **partial unique index** (`cart_items_line_identity_idx`, `WHERE custom_measurements IS NULL`, keyed on `coalesce(size,'std')`/`coalesce(sleeve_option,'any')`) reproducing `cart-provider.tsx`'s `buildLineId` merge rule exactly — but see §16, the *application* merge logic (not a DB `ON CONFLICT`) is what actually enforces it, because a partial/expression unique index isn't targetable by the JS client's `upsert()`. |
-| `orders`, `order_items` | `orders.user_id` is **nullable** (guest checkout is supported — checkout never gated behind sign-in). `order_number` auto-generated (`JF-<year>-<6-digit-sequence>` via a Postgres sequence). `order_items` snapshots `product_name`/`slug`/`image`/`unit_price` at order time so history stays correct if the product later changes. `0011` adds nullable `tracking_number`/`tracking_url`, admin-settable, shown to the customer once set (§16/§17). `0012` adds `razorpay_order_id`/`razorpay_payment_id` (§16). `0013` adds `tax_amount` (new) and finally wires up `discount_amount` (existed since `0001`, never used until now) + a new `coupon_code` snapshot column (§16). |
+| `addresses`, `carts`, `cart_items`, `wishlist_items` | Owner-scoped via RLS. `cart_items` has a **partial unique index** (`cart_items_line_identity_idx`, `WHERE custom_measurements IS NULL AND selected_piece_ids IS NULL`, keyed on `coalesce(size,'std')`/`coalesce(sleeve_option,'any')`) reproducing `cart-provider.tsx`'s `buildLineId` merge rule exactly — but see §16, the *application* merge logic (not a DB `ON CONFLICT`) is what actually enforces it, because a partial/expression unique index isn't targetable by the JS client's `upsert()`. `0021` adds `cart_items.selected_piece_ids jsonb` (a per-piece product's chosen `product_pieces` ids, null otherwise) and excludes those lines from the index for the same reason custom-measurement lines are excluded — `matchesLine`/`buildLineId` compare the sorted id arrays. |
+| `orders`, `order_items` | `orders.user_id` is **nullable** (guest checkout is supported — checkout never gated behind sign-in). `order_number` auto-generated (`JF-<year>-<6-digit-sequence>` via a Postgres sequence). `order_items` snapshots `product_name`/`slug`/`image`/`unit_price` at order time so history stays correct if the product later changes. `0011` adds nullable `tracking_number`/`tracking_url`, admin-settable, shown to the customer once set (§16/§17). `0012` adds `razorpay_order_id`/`razorpay_payment_id` (§16). `0013` adds `tax_amount` (new) and finally wires up `discount_amount` (existed since `0001`, never used until now) + a new `coupon_code` snapshot column (§16). `0021` adds `order_items.selected_pieces text` — a human-readable snapshot ("Top + Bottom + Dupatta") of a per-piece line, alongside the already-snapshotted `unit_price` (the server-computed sum); shown on both the admin and customer order-detail pages next to `selected_size`. |
 | `shipping_zones` | Admin-managed replacement for the old static rate table (`0013`) — `name`, `states text[]`, `rate`, `free_shipping_threshold` (nullable), `eta_min_days`/`eta_max_days`, `is_default` (the catch-all for any state not listed in another zone — enforced in the admin action, not a DB constraint, same as `addresses.is_default`), `sort_order`, `is_active`. RLS-enabled with **no policies** (default-deny) — only ever read/written via the service-role client (§16/§17), same reasoning as `orders`. Real hard delete (§17), same reasoning as `banners`. |
 | `coupons` | `0013` — `code` (unique, stored uppercase), `discount_type` (`percentage`/`fixed`), `discount_value`, `min_order_amount`, `max_discount_amount` (nullable, caps a percentage discount), `starts_at`/`expires_at` (nullable), `usage_limit` (nullable = unlimited), `times_used`, `is_active`. Same RLS-locked-down, service-role-only, hard-delete shape as `shipping_zones`. Validated fresh on every checkout attempt (`lib/services/coupons.ts#validateCoupon`, never cached) — re-validated server-side inside `createOrderAction` regardless of what the client's earlier "Apply" preview said (§16). |
 | `tax_settings` | `0013` — a **singleton row** (`id boolean primary key default true check (id)`, the standard Postgres one-row-table trick; the migration inserts that one row itself). `rate_percent`, `label`, `is_active` — one global rate, off by default. |
@@ -1148,7 +1155,12 @@ that path, to avoid double-adding quantities on every page refresh.
 live prices for every cart line's `product_id` via `lib/repositories/
 products.ts#getProductsForPricing()` — **the client-supplied price/subtotal/
 total on the cart is never read for the order total**, only `productId`/
-`quantity`/`size`/`sleeve`/`customMeasurements`. Rejects if a product is
+`quantity`/`size`/`sleeve`/`customMeasurements`/`selectedPieceIds`. For a
+**per-piece product** (`product_pieces` rows exist, §14) the charged
+`unit_price` is the server-side **sum** of the selected pieces' live prices,
+and `order_items.selected_pieces` is set to their names joined `" + "` — the
+line is rejected with a clear "re-select the pieces" message if the client
+sends an empty or unrecognised piece set. Rejects if a product is
 inactive or sold out. Computes shipping via the untouched `getShippingEstimate`
 (§7). Inserts `orders`+`order_items` via the admin client (no client-writable
 RLS policy exists for these tables — §14), `payment_status`/`status` both
@@ -1400,6 +1412,13 @@ dashboard.ts`), `/admin/products` (+ `new`/`[id]` — full CRUD, search,
 Cloudinary multi-image upload/reorder/delete, soft-delete via `is_active`
 only, never a hard delete since `order_items.product_id` can reference a
 product — see below for the one deliberate, narrowly-scoped exception.
+The product form also carries a **Size Chart** card (single-image upload +
+alt + "remove", handled in `saveProductAction` exactly like
+`saveCollectionAction`'s image — §14 `products.size_chart_*`) and a
+**Pieces & Pricing** card (a repeatable name/price/"default" list serialised
+to a hidden JSON input, reconciled id-preservingly via
+`reconcileProductPieces` — §14 `product_pieces`). Both work at create *and*
+edit time (unlike the images manager, which is edit-only).
 `product-images-manager.tsx`'s upload form reports its own `pending` state
 up to `product-form.tsx` via an `onUploadingChange` callback, which
 disables the main "Save Product" button (plus an inline "Image uploading —

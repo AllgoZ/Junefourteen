@@ -77,6 +77,14 @@ export interface AdminProductImage {
   sortOrder: number;
 }
 
+export interface AdminProductPiece {
+  id: string;
+  name: string;
+  price: number;
+  defaultSelected: boolean;
+  sortOrder: number;
+}
+
 export interface AdminProductDetail {
   id: string;
   slug: string;
@@ -99,8 +107,12 @@ export interface AdminProductDetail {
   sortOrder: number;
   stockQuantity: number;
   lowStockThreshold: number;
+  sizeChartImageUrl: string | null;
+  sizeChartCloudinaryPublicId: string | null;
+  sizeChartImageAlt: string | null;
   sizes: string[];
   sleeveOptions: string[];
+  pieces: AdminProductPiece[];
   collectionIds: string[];
   images: AdminProductImage[];
 }
@@ -127,9 +139,13 @@ interface ProductDetailRow {
   sort_order: number;
   stock_quantity: number;
   low_stock_threshold: number;
+  size_chart_image_url: string | null;
+  size_chart_cloudinary_public_id: string | null;
+  size_chart_image_alt: string | null;
   product_images: { id: string; image_url: string; cloudinary_public_id: string | null; alt: string; sort_order: number }[];
   product_sizes: { size: string }[];
   product_sleeve_options: { sleeve_option: string }[];
+  product_pieces: { id: string; name: string; price: number; default_selected: boolean; sort_order: number }[];
   product_collections: { collection_id: string }[];
 }
 
@@ -144,6 +160,7 @@ export async function getProductForAdmin(
        product_images ( id, image_url, cloudinary_public_id, alt, sort_order ),
        product_sizes ( size ),
        product_sleeve_options ( sleeve_option ),
+       product_pieces ( id, name, price, default_selected, sort_order ),
        product_collections ( collection_id )`
     )
     .eq("id", id)
@@ -175,8 +192,20 @@ export async function getProductForAdmin(
     sortOrder: data.sort_order,
     stockQuantity: data.stock_quantity,
     lowStockThreshold: data.low_stock_threshold,
+    sizeChartImageUrl: data.size_chart_image_url,
+    sizeChartCloudinaryPublicId: data.size_chart_cloudinary_public_id,
+    sizeChartImageAlt: data.size_chart_image_alt,
     sizes: data.product_sizes.map((s) => s.size),
     sleeveOptions: data.product_sleeve_options.map((s) => s.sleeve_option),
+    pieces: [...data.product_pieces]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        defaultSelected: p.default_selected,
+        sortOrder: p.sort_order,
+      })),
     collectionIds: data.product_collections.map((c) => c.collection_id),
     images: [...data.product_images]
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -188,6 +217,13 @@ export async function getProductForAdmin(
         sortOrder: img.sort_order,
       })),
   };
+}
+
+export interface ProductPieceInput {
+  id?: string;
+  name: string;
+  price: number;
+  defaultSelected: boolean;
 }
 
 export interface ProductFormInput {
@@ -211,8 +247,12 @@ export interface ProductFormInput {
   sortOrder: number;
   stockQuantity: number;
   lowStockThreshold: number;
+  sizeChartImageUrl: string | null;
+  sizeChartCloudinaryPublicId: string | null;
+  sizeChartImageAlt: string | null;
   sizes: string[];
   sleeveOptions: string[];
+  pieces: ProductPieceInput[];
   collectionIds: string[];
 }
 
@@ -249,6 +289,54 @@ async function replaceProductRelations(
   }
 }
 
+/**
+ * Id-preserving reconcile for product_pieces — NOT delete-then-reinsert like
+ * the sizes/sleeves/collections above, because cart_items.selected_piece_ids
+ * references these ids by value: keeping ids stable across a product save
+ * means a customer's in-progress cart line survives an unrelated edit.
+ * Rows submitted with a known id are updated in place; rows with no id are
+ * inserted; existing rows absent from the submission are deleted (a piece
+ * removed while it's in someone's cart is fine — checkout re-validates and
+ * rejects that line with a clear "re-select" message).
+ */
+export async function reconcileProductPieces(
+  admin: SupabaseClient<Database>,
+  productId: string,
+  pieces: ProductPieceInput[]
+): Promise<void> {
+  const { data: existing, error: fetchError } = await admin
+    .from("product_pieces")
+    .select("id")
+    .eq("product_id", productId);
+  if (fetchError) throw new Error(`reconcileProductPieces (fetch): ${fetchError.message}`);
+
+  const existingIds = new Set((existing ?? []).map((r) => r.id));
+  const keptIds = new Set(pieces.map((p) => p.id).filter((id): id is string => Boolean(id) && existingIds.has(id!)));
+
+  const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+  if (toDelete.length) {
+    const { error } = await admin.from("product_pieces").delete().in("id", toDelete);
+    if (error) throw new Error(`reconcileProductPieces (delete): ${error.message}`);
+  }
+
+  for (const [index, piece] of pieces.entries()) {
+    const row = {
+      name: piece.name,
+      price: piece.price,
+      default_selected: piece.defaultSelected,
+      sort_order: index,
+      is_active: true,
+    };
+    if (piece.id && existingIds.has(piece.id)) {
+      const { error } = await admin.from("product_pieces").update(row).eq("id", piece.id);
+      if (error) throw new Error(`reconcileProductPieces (update): ${error.message}`);
+    } else {
+      const { error } = await admin.from("product_pieces").insert({ product_id: productId, ...row });
+      if (error) throw new Error(`reconcileProductPieces (insert): ${error.message}`);
+    }
+  }
+}
+
 function toProductColumns(input: ProductFormInput) {
   return {
     slug: input.slug,
@@ -271,6 +359,9 @@ function toProductColumns(input: ProductFormInput) {
     sort_order: input.sortOrder,
     stock_quantity: input.stockQuantity,
     low_stock_threshold: input.lowStockThreshold,
+    size_chart_image_url: input.sizeChartImageUrl,
+    size_chart_cloudinary_public_id: input.sizeChartCloudinaryPublicId,
+    size_chart_image_alt: input.sizeChartImageAlt,
   };
 }
 
@@ -281,6 +372,7 @@ export async function createProductForAdmin(
   const { data, error } = await admin.from("products").insert(toProductColumns(input)).select("id").single();
   if (error || !data) throw new Error(`createProductForAdmin: ${error?.message}`);
   await replaceProductRelations(admin, data.id, input);
+  await reconcileProductPieces(admin, data.id, input.pieces);
   return data.id;
 }
 
@@ -292,6 +384,7 @@ export async function updateProductForAdmin(
   const { error } = await admin.from("products").update(toProductColumns(input)).eq("id", id);
   if (error) throw new Error(`updateProductForAdmin: ${error.message}`);
   await replaceProductRelations(admin, id, input);
+  await reconcileProductPieces(admin, id, input.pieces);
 }
 
 /** Soft delete only — a hard delete could orphan order_items' historical snapshot reference. */
@@ -334,13 +427,25 @@ export async function getProductNamesForIds(
 
 export async function getCloudinaryIdsForProducts(admin: SupabaseClient<Database>, ids: string[]): Promise<string[]> {
   if (ids.length === 0) return [];
-  const { data, error } = await admin
+
+  const { data: imageRows, error } = await admin
     .from("product_images")
     .select("cloudinary_public_id")
     .in("product_id", ids)
     .not("cloudinary_public_id", "is", null);
   if (error) throw new Error(`getCloudinaryIdsForProducts: ${error.message}`);
-  return data.map((row) => row.cloudinary_public_id).filter((id): id is string => id !== null);
+
+  const { data: chartRows, error: chartError } = await admin
+    .from("products")
+    .select("size_chart_cloudinary_public_id")
+    .in("id", ids)
+    .not("size_chart_cloudinary_public_id", "is", null);
+  if (chartError) throw new Error(`getCloudinaryIdsForProducts (size charts): ${chartError.message}`);
+
+  return [
+    ...imageRows.map((row) => row.cloudinary_public_id),
+    ...chartRows.map((row) => row.size_chart_cloudinary_public_id),
+  ].filter((id): id is string => id !== null);
 }
 
 /**

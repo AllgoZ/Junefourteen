@@ -104,12 +104,22 @@ tables) is in `ARCHITECTURE.md` §14 — this is the compact map.
 - `products` — the core entity. `is_active` (soft-delete/hide),
   `is_sold_out` (the *only* flag that blocks a purchase — see
   `stock_quantity` below), `custom_size_enabled`, `stock_quantity`/
-  `low_stock_threshold` (visibility only, §14 note on 0008).
+  `low_stock_threshold` (visibility only, §14 note on 0008),
+  `size_chart_image_url`/`_cloudinary_public_id`/`_image_alt` (0020 —
+  optional per-product size-chart image).
 - `collections` — named groupings, own cover image.
 - `product_collections` — many-to-many join (a product can belong to
   several collections — not a single `collection_id` FK).
 - `product_images`, `product_sizes`, `product_sleeve_options` — child rows,
   `sort_order`-ordered, cascade-deleted with their product.
+- `product_pieces` (0021) — per-piece pricing (Top / Bottom / Dupatta).
+  `name`/`price`/`default_selected`/`sort_order`/`is_active`. Zero rows ⇒
+  the product uses its single `products.price`. With rows, the storefront
+  makes the customer tick ≥1 and `createOrderAction` charges the
+  server-computed **sum** (never the client's line price). Same
+  public-read RLS shape as `product_images`; admin writes id-preservingly
+  via `reconcileProductPieces` so `cart_items.selected_piece_ids` stays
+  valid across a product save.
 
 **Customer data**
 - `profiles` — one row per `auth.users` row (`id` = `auth.users.id`,
@@ -121,8 +131,11 @@ tables) is in `ARCHITECTURE.md` §14 — this is the compact map.
 - `carts`/`cart_items` — one cart per user (`carts.user_id` is `unique`);
   `cart_items` has a partial unique index reproducing the client's
   `buildLineId` merge logic exactly (same product+size+sleeve merges,
-  `coalesce`d against `'std'`/`'any'`; a custom-measurement line never
-  merges — the index's `where custom_measurements is null` clause).
+  `coalesce`d against `'std'`/`'any'`; custom-measurement and per-piece
+  lines never DB-merge — the index's
+  `where custom_measurements is null and selected_piece_ids is null`
+  clause; `matchesLine` compares the sorted `selected_piece_ids` (0021)
+  arrays in app code instead).
 
 **Orders**
 - `orders` — `order_number` auto-generated (`JF-<year>-<seq>`,
@@ -136,7 +149,9 @@ tables) is in `ARCHITECTURE.md` §14 — this is the compact map.
 - `order_items` — `product_id` is `on delete set null`, with `product_
   name`/`product_slug`/`product_image`/`unit_price` all **snapshotted**
   onto the row — an order must render correctly even after the product
-  is later edited or deleted.
+  is later edited or deleted. `selected_pieces` (0021) is a text snapshot
+  ("Top + Bottom + Dupatta") of a per-piece line; `unit_price` is already
+  the server-computed sum.
 - `order_requests` (0018/0019) — the "Request to Order" pre-order lead
   capture for sold-out products. **Not** `orders`/`order_items` — a lead,
   not a priced/paid transaction. Same snapshot convention

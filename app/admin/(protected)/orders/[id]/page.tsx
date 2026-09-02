@@ -144,6 +144,8 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               <div>
                 <p className="font-medium text-foreground">{item.product_name}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
+                  {item.selected_pieces && item.selected_pieces}
+                  {item.selected_pieces && item.selected_size && " · "}
                   {item.selected_size && `Size ${item.selected_size}`}
                   {item.selected_sleeve_option && ` · ${item.selected_sleeve_option}`}
                   {item.custom_measurements && " · Custom Size"}

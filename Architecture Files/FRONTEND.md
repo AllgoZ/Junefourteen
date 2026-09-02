@@ -54,7 +54,12 @@ components/
                banner, social grid) — see §7 below
   product/     Card/grid/gallery/image, size & custom-size flow, add-to-bag
                panel, request-to-order-dialog.tsx (the sold-out-product
-               lead-capture form, mobile-keyboard-safe per §9)
+               lead-capture form, mobile-keyboard-safe per §9),
+               piece-selector.tsx (multi-select chips for a per-piece product
+               — Top / Bottom / Dupatta — price = sum of ticked pieces;
+               ARCHITECTURE.md §14/§16), size-guide-modal.tsx (shows the
+               product's uploaded size-chart image when set, else the generic
+               table)
   cart/        Drawer, line item, shipping estimator
   checkout/    Checkout form + order summary
   account/     Sign-in/up forms, orders/addresses/profile panels, order-requests
@@ -63,7 +68,10 @@ components/
   admin/       Admin nav + every entity form (product/collection/banner/
                shipping-zone/coupon/campaign-banner/gallery-images-form/
                about-page-form/legal-page-form) — see §8 for the shared form
-               pattern, incl. the stay-on-page variant these last two use
+               pattern, incl. the stay-on-page variant these last two use.
+               product-form.tsx also has a Size Chart image card and a
+               repeatable Pieces & Pricing list (hidden-JSON-input, like
+               SocialLinksForm) — ARCHITECTURE.md §17
   marketing/   legal-page-body.tsx — shared renderer for the admin-authored
                `## Heading` + blank-line-separated-paragraph body format used
                by both /privacy and /terms (see §8's Legal Pages note)

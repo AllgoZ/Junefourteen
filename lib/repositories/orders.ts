@@ -51,6 +51,8 @@ export interface NewOrderItem {
   selectedSize?: string;
   selectedSleeveOption?: string;
   customMeasurements?: Database["public"]["Tables"]["order_items"]["Row"]["custom_measurements"];
+  /** "Top + Bottom + Dupatta" — snapshot for a per-piece product, null otherwise. */
+  selectedPieces?: string | null;
 }
 
 export interface NewOrder {
@@ -108,6 +110,7 @@ export async function createOrder(
       selected_size: item.selectedSize ?? null,
       selected_sleeve_option: item.selectedSleeveOption ?? null,
       custom_measurements: item.customMeasurements ?? null,
+      selected_pieces: item.selectedPieces ?? null,
     }))
   );
   if (itemsError) throw new Error(`createOrder items: ${itemsError.message}`);

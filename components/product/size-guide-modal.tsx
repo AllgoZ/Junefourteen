@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -7,9 +8,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import cloudinaryLoader from "@/lib/cloudinary/loader";
 import { SizeGuideContent } from "@/components/product/size-guide-content";
 
-export function SizeGuideModal({ trigger }: { trigger?: React.ReactNode }) {
+export function SizeGuideModal({
+  trigger,
+  image,
+}: {
+  trigger?: React.ReactNode;
+  /** When set, the popup shows this uploaded chart instead of the generic table. */
+  image?: { src: string; alt: string };
+}) {
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -23,7 +32,19 @@ export function SizeGuideModal({ trigger }: { trigger?: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle className="text-xl font-medium tracking-tight">Size Guide</DialogTitle>
         </DialogHeader>
-        <SizeGuideContent />
+        {image ? (
+          <Image
+            loader={cloudinaryLoader}
+            src={image.src}
+            alt={image.alt || "Size chart"}
+            width={1000}
+            height={1400}
+            sizes="(min-width: 640px) 36rem, 90vw"
+            className="h-auto w-full rounded-md"
+          />
+        ) : (
+          <SizeGuideContent />
+        )}
       </DialogContent>
     </Dialog>
   );

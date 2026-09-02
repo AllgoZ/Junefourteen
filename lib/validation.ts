@@ -36,6 +36,8 @@ export function validateCustomMeasurements(
 interface SelectionInput {
   requiresSize: boolean;
   requiresSleeve: boolean;
+  requiresPieces?: boolean;
+  pieceCount?: number;
   sizeMode: "standard" | "custom";
   size?: string;
   sleeve?: string;
@@ -45,12 +47,16 @@ interface SelectionInput {
 export interface SelectionErrors {
   size?: string;
   sleeve?: string;
+  pieces?: string;
   measurements?: Record<string, string>;
 }
 
 export function validateAddToBagSelection(input: SelectionInput): SelectionErrors {
   const errors: SelectionErrors = {};
 
+  if (input.requiresPieces && (input.pieceCount ?? 0) === 0) {
+    errors.pieces = "Choose at least one piece";
+  }
   if (input.requiresSize && input.sizeMode === "standard" && !input.size) {
     errors.size = "Select a size";
   }
@@ -68,7 +74,7 @@ export function validateAddToBagSelection(input: SelectionInput): SelectionError
 }
 
 export function hasSelectionErrors(errors: SelectionErrors): boolean {
-  return Boolean(errors.size || errors.sleeve || errors.measurements);
+  return Boolean(errors.size || errors.sleeve || errors.pieces || errors.measurements);
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

@@ -31,6 +31,20 @@ export interface ProductImage {
   tone: number;
 }
 
+/**
+ * One priced piece of a per-piece product (e.g. Top / Bottom / Dupatta of a
+ * kurta set). A product with no pieces is a normal single-price product; a
+ * product with pieces lets the customer tick any combination (≥1) and the
+ * price is the sum of the ticked pieces.
+ */
+export interface ProductPiece {
+  id: string;
+  name: string;
+  price: number;
+  /** Ticked when the product page first loads (admin-controlled per piece). */
+  defaultSelected: boolean;
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -49,6 +63,10 @@ export interface Product {
   sizes: Size[];
   sleeveOptions?: SleeveOption[];
   supportsCustomSize?: boolean;
+  /** When present, the customer picks a subset (≥1); price = sum of picks. Absent ⇒ normal single-price product. */
+  pieces?: ProductPiece[];
+  /** Admin-uploaded size chart. When set, the "Size Guide" popup shows this image instead of the generic table. */
+  sizeChartImage?: { src: string; alt: string };
   fabric: string;
   washCare: string[];
   shippingInfo: string;

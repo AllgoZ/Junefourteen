@@ -3,14 +3,109 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import Image from "next/image";
+import { ImagePlus, Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { AdminCard } from "@/components/admin/ui/card";
+import cloudinaryLoader from "@/lib/cloudinary/loader";
 import { SIZES } from "@/types/product";
 import { saveProductAction, type ProductFormState } from "@/app/admin/(protected)/products/actions";
 import type { AdminProductDetail } from "@/lib/repositories/admin/products";
 import { ProductImagesManager } from "@/components/admin/product-images-manager";
+
+interface PieceRow {
+  id?: string;
+  name: string;
+  price: string;
+  defaultSelected: boolean;
+}
+
+/**
+ * Repeatable "Pieces" editor. Empty ⇒ a normal single-price product. When
+ * rows exist, the storefront hides the single price and the customer ticks a
+ * subset (≥1); the price shown is the sum of the ticked pieces. Serialised to
+ * a hidden JSON input the way SocialLinksForm does.
+ */
+function PiecesField({ initial }: { initial: PieceRow[] }) {
+  const [rows, setRows] = useState<PieceRow[]>(initial);
+
+  const update = (index: number, patch: Partial<PieceRow>) =>
+    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+
+  const serialised = JSON.stringify(
+    rows
+      .filter((r) => r.name.trim())
+      .map((r) => ({
+        id: r.id,
+        name: r.name.trim(),
+        price: Number(r.price) || 0,
+        defaultSelected: r.defaultSelected,
+      }))
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input type="hidden" name="pieces" value={serialised} />
+      {rows.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Leave empty for a normal single-price product. Add pieces (e.g. Top, Bottom, Dupatta) for a set —
+          the price shown becomes the total of the ticked pieces.
+        </p>
+      )}
+      {rows.map((row, index) => (
+        <div key={index} className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label="Piece name"
+            placeholder="Top"
+            value={row.name}
+            onChange={(e) => update(index, { name: e.target.value })}
+            className="w-40"
+          />
+          <Input
+            aria-label="Piece price"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Price"
+            value={row.price}
+            onChange={(e) => update(index, { price: e.target.value })}
+            className="w-32"
+          />
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={row.defaultSelected}
+              onChange={(e) => update(index, { defaultSelected: e.target.checked })}
+              className="size-4 rounded border-input accent-foreground"
+            />
+            Ticked by default
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Remove piece"
+            onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}
+            className="hover:text-destructive"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setRows((prev) => [...prev, { name: "", price: "", defaultSelected: true }])}
+        className="self-start"
+      >
+        <Plus className="size-4" /> Add piece
+      </Button>
+    </div>
+  );
+}
 
 const SLEEVE_OPTIONS = ["Sleeveless", "3/4 Sleeve", "Full Sleeve", '18" Sleeve'] as const;
 
@@ -163,6 +258,63 @@ export function ProductForm({
             <Field label="Sleeve Options" hint="Leave all unchecked if not applicable">
               <CheckboxGroup name="sleeveOptions" options={SLEEVE_OPTIONS} defaultValues={product?.sleeveOptions ?? []} />
             </Field>
+          </div>
+        </AdminCard>
+
+        <AdminCard title="Pieces & Pricing" description="For sets sold piece by piece (Top / Bottom / Dupatta). Size stays a separate choice.">
+          <PiecesField
+            initial={(product?.pieces ?? []).map((p) => ({
+              id: p.id,
+              name: p.name,
+              price: String(p.price),
+              defaultSelected: p.defaultSelected,
+            }))}
+          />
+        </AdminCard>
+
+        <AdminCard title="Size Chart" description="Shown in the product's “Size Guide” popup instead of the generic table when set.">
+          <div className="flex flex-col gap-4">
+            {product?.sizeChartImageUrl && (
+              <div className="relative w-40 overflow-hidden rounded-lg border border-border">
+                <Image
+                  loader={cloudinaryLoader}
+                  src={product.sizeChartImageUrl}
+                  alt={product.sizeChartImageAlt ?? ""}
+                  width={320}
+                  height={440}
+                  sizes="160px"
+                  className="h-auto w-full"
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border p-4">
+              <ImagePlus className="mb-1.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="product-size-chart">
+                  {product?.sizeChartImageUrl ? "Replace image" : "Image"}
+                </Label>
+                <input id="product-size-chart" name="sizeChartImage" type="file" accept="image/*" className="text-sm" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="product-size-chart-alt">Alt Text</Label>
+                <Input
+                  id="product-size-chart-alt"
+                  name="sizeChartImageAlt"
+                  defaultValue={product?.sizeChartImageAlt ?? ""}
+                  className="w-56"
+                />
+              </div>
+            </div>
+            {product?.sizeChartImageUrl && (
+              <label className="flex items-center gap-2.5 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  name="removeSizeChartImage"
+                  className="size-4 rounded border-input accent-foreground"
+                />
+                Remove current image (reverts to the generic size table)
+              </label>
+            )}
           </div>
         </AdminCard>
 

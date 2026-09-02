@@ -89,6 +89,9 @@ export interface Database {
           sort_order: number;
           stock_quantity: number;
           low_stock_threshold: number;
+          size_chart_image_url: string | null;
+          size_chart_cloudinary_public_id: string | null;
+          size_chart_image_alt: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -114,6 +117,9 @@ export interface Database {
           sort_order?: number;
           stock_quantity?: number;
           low_stock_threshold?: number;
+          size_chart_image_url?: string | null;
+          size_chart_cloudinary_public_id?: string | null;
+          size_chart_image_alt?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -242,6 +248,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["product_sleeve_options"]["Insert"]>;
         Relationships: [];
       };
+      product_pieces: {
+        Row: {
+          id: string;
+          product_id: string;
+          name: string;
+          price: number;
+          default_selected: boolean;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          name: string;
+          price: number;
+          default_selected?: boolean;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["product_pieces"]["Insert"]>;
+        Relationships: [];
+      };
       addresses: {
         Row: {
           id: string;
@@ -290,6 +322,7 @@ export interface Database {
           size: string | null;
           sleeve_option: string | null;
           custom_measurements: Json | null;
+          selected_piece_ids: Json | null;
           quantity: number;
           created_at: string;
           updated_at: string;
@@ -301,6 +334,7 @@ export interface Database {
           size?: string | null;
           sleeve_option?: string | null;
           custom_measurements?: Json | null;
+          selected_piece_ids?: Json | null;
           quantity: number;
           created_at?: string;
           updated_at?: string;
@@ -379,6 +413,7 @@ export interface Database {
           selected_size: string | null;
           selected_sleeve_option: string | null;
           custom_measurements: Json | null;
+          selected_pieces: string | null;
           created_at: string;
         };
         Insert: {
@@ -393,6 +428,7 @@ export interface Database {
           selected_size?: string | null;
           selected_sleeve_option?: string | null;
           custom_measurements?: Json | null;
+          selected_pieces?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["order_items"]["Insert"]>;

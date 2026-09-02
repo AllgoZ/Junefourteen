@@ -33,7 +33,7 @@ export function SizeAndFit({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-medium text-foreground">Size</p>
-          <SizeGuideModal />
+          <SizeGuideModal image={product.sizeChartImage} />
         </div>
         <SizeSelector sizes={product.sizes} value={size} onChange={onSizeChange} error={errors.size} />
       </div>
@@ -48,7 +48,7 @@ export function SizeAndFit({
             <TabsTrigger value="standard">Standard Size</TabsTrigger>
             <TabsTrigger value="custom">Custom Size</TabsTrigger>
           </TabsList>
-          {sizeMode === "standard" && <SizeGuideModal />}
+          {sizeMode === "standard" && <SizeGuideModal image={product.sizeChartImage} />}
         </div>
 
         <TabsContent value="standard">

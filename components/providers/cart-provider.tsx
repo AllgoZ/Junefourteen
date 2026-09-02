@@ -37,7 +37,10 @@ function buildLineId(item: Omit<CartItem, "lineId" | "quantity">): string {
   if (item.customMeasurements) {
     return `${item.productId}-custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
-  return [item.productId, item.size ?? "std", item.sleeve ?? "any"].join("-");
+  // Different piece combos are different lines; the same combo merges — sort
+  // the ids so selection order doesn't matter.
+  const pieceKey = item.selectedPieceIds?.length ? [...item.selectedPieceIds].sort().join("+") : "none";
+  return [item.productId, item.size ?? "std", item.sleeve ?? "any", pieceKey].join("-");
 }
 
 interface CartContextValue {

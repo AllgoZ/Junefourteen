@@ -10,6 +10,7 @@ import { Price } from "@/components/product/price";
 import { WishlistButton } from "@/components/product/wishlist-button";
 import { SizeAndFit } from "@/components/product/size-and-fit";
 import { SleeveSelector } from "@/components/product/sleeve-selector";
+import { PieceSelector } from "@/components/product/piece-selector";
 import { useCart } from "@/components/providers/cart-provider";
 import { validateAddToBagSelection, hasSelectionErrors, type SelectionErrors } from "@/lib/validation";
 import { formatPrice } from "@/lib/format";
@@ -44,6 +45,9 @@ export function AddToBagPanel({
 
   const [size, setSize] = useState<Size | undefined>();
   const [sleeve, setSleeve] = useState<SleeveOption | undefined>();
+  const [pieceIds, setPieceIds] = useState<Set<string>>(
+    () => new Set((product.pieces ?? []).filter((p) => p.defaultSelected).map((p) => p.id))
+  );
   const [sizeMode, setSizeMode] = useState<"standard" | "custom">("standard");
   const [customMeasurements, setCustomMeasurements] = useState<Partial<CustomMeasurements>>({
     unit: "cm",
@@ -82,6 +86,26 @@ export function AddToBagPanel({
   }, []);
 
   const requiresSleeve = Boolean(product.sleeveOptions?.length);
+  const pieces = product.pieces ?? [];
+  const hasPieces = pieces.length > 0;
+
+  /** Selected pieces in the product's own sort order. */
+  const selectedPieces = pieces.filter((p) => pieceIds.has(p.id));
+  const displayPrice = hasPieces
+    ? selectedPieces.reduce((sum, p) => sum + p.price, 0)
+    : product.price;
+  const displayCompareAtPrice = hasPieces ? undefined : product.compareAtPrice;
+
+  function togglePiece(id: string) {
+    setPieceIds((prev) => {
+      // Keep at least one piece selected — unticking the last one is a no-op.
+      if (prev.has(id) && prev.size === 1) return prev;
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function buildLine() {
     return {
@@ -89,11 +113,13 @@ export function AddToBagPanel({
       slug: product.slug,
       name: product.name,
       image: product.images[0],
-      price: product.price,
-      compareAtPrice: product.compareAtPrice,
+      price: displayPrice,
+      compareAtPrice: displayCompareAtPrice,
       size: sizeMode === "standard" ? size : undefined,
       sleeve,
       customMeasurements: sizeMode === "custom" ? (customMeasurements as CustomMeasurements) : undefined,
+      selectedPieceIds: hasPieces ? selectedPieces.map((p) => p.id) : undefined,
+      selectedPieces: hasPieces ? selectedPieces.map((p) => p.name).join(" + ") : undefined,
     };
   }
 
@@ -101,6 +127,8 @@ export function AddToBagPanel({
     const nextErrors = validateAddToBagSelection({
       requiresSize: true,
       requiresSleeve,
+      requiresPieces: hasPieces,
+      pieceCount: pieceIds.size,
       sizeMode,
       size,
       sleeve,
@@ -140,7 +168,7 @@ export function AddToBagPanel({
       <div>
         <h1 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">{product.name}</h1>
         <div className="mt-2">
-          <Price price={product.price} compareAtPrice={product.compareAtPrice} size="lg" />
+          <Price price={displayPrice} compareAtPrice={displayCompareAtPrice} size="lg" />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{product.shortDescription}</p>
         {product.isSoldOut && (
@@ -152,6 +180,18 @@ export function AddToBagPanel({
 
       {!product.isSoldOut && (
         <>
+          {hasPieces && (
+            <div>
+              <p className="mb-2 text-sm font-medium text-foreground">Choose your pieces</p>
+              <PieceSelector
+                pieces={pieces}
+                selected={pieceIds}
+                onToggle={togglePiece}
+                error={errors.pieces}
+              />
+            </div>
+          )}
+
           <SizeAndFit
             product={product}
             sizeMode={sizeMode}
@@ -253,7 +293,7 @@ export function AddToBagPanel({
             className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:hidden"
           >
             <span className="text-sm font-medium text-foreground tabular-nums">
-              {formatPrice(product.price)}
+              {formatPrice(displayPrice)}
             </span>
             <Button onClick={handleAddToBag} className={cn("max-w-[240px] flex-1", STICKY_CTA)}>
               Add to Bag
