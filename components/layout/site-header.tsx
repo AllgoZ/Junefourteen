@@ -53,7 +53,15 @@ export function SiteHeader() {
     const hero = document.querySelector<HTMLElement>("[data-hero]");
     if (!hero) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setScrolled(!entry.isIntersecting),
+      ([entry]) => {
+        // Ignore a reading taken before the hero has laid out — its
+        // dvh-based height is 0 then and it would falsely report "gone",
+        // flipping the header solid at the very top of the page. `scrolled`
+        // starts false (correct for a fresh top-of-page load), and the
+        // observer fires again once the hero has real dimensions.
+        if (entry.boundingClientRect.height === 0) return;
+        setScrolled(!entry.isIntersecting);
+      },
       { rootMargin: "-64px 0px 0px 0px" }
     );
     observer.observe(hero);
@@ -66,6 +74,14 @@ export function SiteHeader() {
   return (
     <>
       <header
+        // Inert hook for the CSS fallback in globals.css: the homepage is
+        // statically prerendered and usePathname() can resolve to null
+        // during that prerender (seen on Vercel), so this component renders
+        // its non-home background into the "/" HTML — a flash of a solid bar
+        // over the hero until hydration. That CSS pins the header transparent
+        // over the hero while data-scrolled is false; this attr is what lets
+        // it opt back out once the hero scrolls away.
+        data-scrolled={scrolled}
         className={cn(
           "sticky top-0 z-40 border-b transition-colors duration-300",
           overHero

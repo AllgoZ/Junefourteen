@@ -654,9 +654,28 @@ take effect — `next.config.ts` isn't hot-reloaded.
   so there is nothing to mis-measure and no scroll-event timing race. This
   also *removes* the restored-scroll tradeoff noted above: the observer
   reports the correct state immediately in both directions. Non-homepage
-  routes are untouched (still `window.scrollY > 4`). SSR was, again,
-  confirmed always correct (`curl` → `bg-transparent` + `text-white` on
-  `/`) — this stayed a purely client-side flip throughout.
+  routes are untouched (still `window.scrollY > 4`).
+
+  **Follow-up — the white bar was still there, and this time SSR *was* the
+  problem.** Every prior round "confirmed SSR correct" by `curl`-ing a
+  **local** `next build`, where `usePathname()` resolves to `/` during the
+  static prerender of `/`, so `<SiteHeader>` renders `bg-transparent`. On
+  **Vercel**, the same static prerender resolves `usePathname()` to `null`,
+  so `overHero` is false and the non-home fallback (`bg-background/70
+  backdrop-blur-sm` + dark text) is what lands in the `/` HTML — a genuine
+  solid-bar flash over the hero on every load, until React hydrates and
+  corrects it. (`curl https://www.junefourteen.in/` shows it directly; a
+  local build does not.) **Fix** (not more JS timing work): a CSS rule in
+  `app/(site)/globals.css` — `body:has([data-hero]) header[data-scrolled="false"]`
+  pins the header transparent + white-text over the hero. `<section data-hero>`
+  is only ever on `/`, first paint is always at scroll 0, and the header now
+  carries an inert `data-scrolled={scrolled}` attribute so the rule drops out
+  the moment the hero scrolls away (React's own classes drive everything
+  post-hydration, unchanged). Also belt-and-braces: the `IntersectionObserver`
+  callback now ignores a reading where the hero's `boundingClientRect.height`
+  is 0 (layout/`dvh` not yet resolved), so it can't itself flip the header
+  solid at the top of the page. Storefront markup/layout/behaviour otherwise
+  untouched.
 
 - **Collections** (`components/home/featured-collections.tsx`) — the
   homepage section is titled just "Collections" (not "Featured Collections"),

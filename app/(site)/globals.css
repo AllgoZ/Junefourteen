@@ -171,4 +171,31 @@
   .snap-start {
     scroll-snap-align: start;
   }
+
+  /*
+   * Homepage header, pre-hydration fallback.
+   *
+   * "/" is statically prerendered and usePathname() can resolve to null
+   * during that prerender (observed on Vercel; a local `next build` resolves
+   * it to "/"). When it's null, <SiteHeader>'s `overHero` is false, so the
+   * non-home background + dark text land in the "/" HTML — a flash of a
+   * solid/blurred bar over the hero until React hydrates and corrects it.
+   *
+   * The hero (<section data-hero>) is only ever rendered on "/", and first
+   * paint is always at scroll 0, so pin the header transparent
+   * (white-on-photo) over it here in CSS. React's own overHero classes take
+   * over on hydration with the same result; once the hero scrolls away the
+   * header gets data-scrolled="true", which drops this rule so the solid
+   * scrolled state still shows.
+   */
+  body:has([data-hero]) header[data-scrolled="false"] {
+    background-color: transparent;
+    border-color: transparent;
+    color: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  body:has([data-hero]) header[data-scrolled="false"] :is(a, button) {
+    color: #fff;
+  }
 }
