@@ -31,26 +31,33 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   useEffect(() => {
-    // On the homepage the header should stay transparent for the height of
-    // the hero (75dvh), not just the first few px of scroll — everywhere
-    // else keeps the original small threshold.
-    //
-    // Deliberately NOT calling onScroll() synchronously on mount: dvh-based
-    // layout (the hero's h-[75dvh] plus its negative top margin pulling it
-    // under the header) isn't reliably settled the instant this effect
-    // runs on a mobile browser — window.innerHeight/scrollY read right at
-    // mount can reflect a not-yet-resolved viewport (e.g. before the
-    // address bar's collapsed/expanded state is final), which was
-    // incorrectly flipping `scrolled` to true on a fresh load at the very
-    // top of the page. The initial `scrolled = false` state is already
-    // correct for a fresh load; only trust measurements taken from a real
-    // scroll event, by which point the browser's viewport has settled.
-    const onScroll = () => {
-      const threshold = pathname === "/" ? window.innerHeight * 0.7 : 4;
-      setScrolled(window.scrollY > threshold);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    // Every route other than the homepage: solidify after a few px of scroll.
+    if (pathname !== "/") {
+      const onScroll = () => setScrolled(window.scrollY > 4);
+      window.addEventListener("scroll", onScroll, { passive: true });
+      return () => window.removeEventListener("scroll", onScroll);
+    }
+
+    // Homepage: the header stays transparent (white-on-photo) while the hero
+    // is on screen, then solidifies once it scrolls away. Watch the hero
+    // element itself via IntersectionObserver rather than comparing
+    // window.scrollY against window.innerHeight * 0.7 — that comparison
+    // depends on the mobile viewport being fully settled (dynamic address
+    // bar, dvh resolution, browser scroll-restoration) at the instant a
+    // scroll event fires, which it frequently isn't right after a load, and
+    // was intermittently leaving the header in its solid state at the very
+    // top of the page. The observer keys off the hero's real geometry, so
+    // there's nothing to mis-measure and no scroll-timing race. `rootMargin`
+    // top ≈ the header's own height, so the flip happens as the hero's
+    // bottom edge passes under the header rather than off the screen.
+    const hero = document.querySelector<HTMLElement>("[data-hero]");
+    if (!hero) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry.isIntersecting),
+      { rootMargin: "-64px 0px 0px 0px" }
+    );
+    observer.observe(hero);
+    return () => observer.disconnect();
   }, [pathname]);
 
   /** Transparent, white-on-photo nav over the homepage hero — every other route/scroll state is untouched. */

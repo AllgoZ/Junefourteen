@@ -596,14 +596,18 @@ take effect — `next.config.ts` isn't hot-reloaded.
 
 - **Site nav is transparent-over-hero on the homepage only**
   (`components/layout/site-header.tsx`) — white text/icons, no
-  background/blur, while `pathname === "/"` and the page hasn't scrolled past
-  roughly the hero's height (`window.innerHeight * 0.7` threshold on `/`,
-  vs. a `4px` threshold on every other route — this bigger threshold is what
-  keeps the transparent state alive for the *whole* hero instead of
-  flipping solid after a few px of scroll). Solidifies to the standard
+  background/blur, while `pathname === "/"` and the hero is still on screen.
+  **How "still on screen" is detected**: on `/`, an `IntersectionObserver`
+  watches the hero `<section>` (marked `data-hero` in `hero-section.tsx`)
+  with `rootMargin: "-64px 0px 0px 0px"` (≈ the header's own height) —
+  `scrolled` flips true the moment the hero's bottom edge passes under the
+  header, false when it comes back. Every **other route** keeps the original
+  tiny scroll listener (`window.scrollY > 4`). Solidifies to the standard
   `bg-background/90 backdrop-blur-md` treatment on scroll, exactly like every
   other route always has. Every non-home route's header is byte-identical to
-  before. (A same-day variant that hid the header entirely — no icons, no
+  before. (Earlier this used a `window.scrollY > window.innerHeight * 0.7`
+  comparison on `/`; that was replaced — see the mobile-bug note just below.)
+  (A same-day variant that hid the header entirely — no icons, no
   logo, nothing — over the hero was tried and reverted per direct feedback:
   the icons/logo should stay visible, overlaid transparently on the hero
   photo exactly as they always have; only the *solid bar* is scroll-gated,
@@ -636,6 +640,23 @@ take effect — `next.config.ts` isn't hot-reloaded.
   header style for a moment until the next real scroll event, instead of
   being instantly correct — minor and rare next to the bug it replaces,
   which hit every fresh homepage visit.
+
+  **Follow-up — the white bar came back, and the scroll-threshold approach
+  itself was replaced.** Removing the sync `onScroll()` wasn't enough: the
+  header was still intermittently loading solid on mobile, because *any*
+  early `scroll` event (mobile address-bar collapse, `dvh` resolution,
+  Chromium's scroll-restoration on a tab-restore) firing before
+  `window.innerHeight`/`window.scrollY` settle can still make
+  `window.scrollY > window.innerHeight * 0.7` evaluate true near the top of
+  the page. The whole comparison was the fragile part. Replaced with an
+  `IntersectionObserver` on the hero element (`data-hero` marker,
+  `rootMargin: "-64px 0px 0px 0px"`) — it keys off the hero's real geometry,
+  so there is nothing to mis-measure and no scroll-event timing race. This
+  also *removes* the restored-scroll tradeoff noted above: the observer
+  reports the correct state immediately in both directions. Non-homepage
+  routes are untouched (still `window.scrollY > 4`). SSR was, again,
+  confirmed always correct (`curl` → `bg-transparent` + `text-white` on
+  `/`) — this stayed a purely client-side flip throughout.
 
 - **Collections** (`components/home/featured-collections.tsx`) — the
   homepage section is titled just "Collections" (not "Featured Collections"),

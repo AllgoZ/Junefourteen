@@ -76,7 +76,7 @@ export function HeroSection({ banners }: { banners: Banner[] }) {
   }, []);
 
   return (
-    <section className="relative -mt-14 h-[75dvh] overflow-hidden sm:-mt-[72px]">
+    <section data-hero className="relative -mt-14 h-[75dvh] overflow-hidden sm:-mt-[72px]">
       <div
         ref={scrollerRef}
         onScroll={() => {
