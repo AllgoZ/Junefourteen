@@ -44,6 +44,22 @@ Your full catalog. From here you can:
   stops customers from buying it. When a product is sold out, its "Add to
   Bag" button is replaced on the product page with **"Request to Order"**
   (more on that under **Order Requests** below).
+- **Sell a product piece by piece** (the "Pieces & Pricing" section on the
+  product form) — for a set like a kurta with a top, bottom, and dupatta,
+  add each piece with its own name and price (e.g. Top ₹1,099, Bottom
+  ₹700, Dupatta ₹700) and tick which ones should be pre-selected when a
+  customer first opens the product page. On the live site, the customer
+  ticks any combination they want (at least one) and the price updates
+  automatically to match — the order they place, and what you see under
+  **Orders**, records exactly which pieces they bought. Leave this section
+  empty for a normal product with just the one price — nothing else about
+  it changes.
+- **Upload a custom size chart** (the "Size Chart" section on the product
+  form) — if this product's sizing doesn't match your standard chart,
+  upload a photo of its own chart here. When set, that's what a customer
+  sees when they tap "Size Guide" on this specific product's page instead
+  of the regular size table. Leave it empty and the product just uses the
+  regular one.
 - **Select multiple products** (checkboxes on the list) to activate,
   deactivate, or delete several at once.
 - **Deactivating** a product hides it from the live site without deleting
@@ -212,6 +228,18 @@ A few store-wide, one-off settings live here:
 - **Tax** — a single store-wide tax rate (e.g. GST), applied on top of
   every order's subtotal at checkout. Turned off by default until you
   switch it on here.
+
+---
+
+## Analytics
+
+The site can report visitor traffic to a Meta (Facebook) Pixel and a
+Google Analytics 4 property, so you can see how people are finding and
+using the store. There's nothing to manage here day to day — a developer
+sets the pixel/property IDs once when the site is deployed, and after
+that the data just flows into your Meta Events Manager / Google Analytics
+dashboards on their own. If those aren't showing data yet, that's a setup
+step for your developer, not something in this admin panel.
 
 ---
 

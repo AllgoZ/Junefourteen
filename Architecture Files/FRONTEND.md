@@ -75,8 +75,10 @@ components/
   marketing/   legal-page-body.tsx — shared renderer for the admin-authored
                `## Heading` + blank-line-separated-paragraph body format used
                by both /privacy and /terms (see §8's Legal Pages note)
-  analytics/   meta-pixel.tsx — storefront-only, gated on
-               NEXT_PUBLIC_META_PIXEL_ID, see ARCHITECTURE.md §23
+  analytics/   meta-pixel.tsx + google-analytics.tsx — both storefront-only,
+               gated on NEXT_PUBLIC_META_PIXEL_ID /
+               NEXT_PUBLIC_GA_MEASUREMENT_ID respectively, see
+               ARCHITECTURE.md §23
   providers/   CartProvider, WishlistProvider (§6)
 hooks/         use-recent-searches.ts
 lib/config/site.ts   Brand config — the only place to change brand name/nav/
@@ -338,6 +340,21 @@ the format is deliberately this narrow.
   *actual* merged class string in a throwaway script rather than assuming
   `tailwind-merge` resolved the conflict the way you expect — cheap
   insurance against a silently-losing override.
+- **`usePathname()` can resolve to `null` during the static prerender of a
+  route on some hosts (observed on Vercel), even for a route with no
+  dynamic params** — a local `next build` can resolve it correctly while the
+  deployed build doesn't, so `curl localhost` after a local build is *not*
+  sufficient evidence that a `pathname`-dependent SSR branch is correct;
+  `curl` the actual deployed URL. Hit in `SiteHeader`'s homepage-transparent
+  logic (`overHero = pathname === "/" && !scrolled`) — the non-home
+  fallback background shipped in `/`'s prerendered HTML on Vercel, a
+  solid-bar flash until hydration corrected it. Fixed with a CSS-only
+  fallback in `app/(site)/globals.css`
+  (`body:has([data-hero]) header[data-scrolled="false"]`) keyed off a marker
+  that *is* reliably present in the static HTML (`<section data-hero>`,
+  only ever on the homepage) rather than trying to make `usePathname()`
+  itself more reliable. See `ARCHITECTURE.md` §10's "Follow-up — the white
+  bar was still there" note for the full story.
 - Full list, including framework/build gotchas outside the frontend proper:
   `ARCHITECTURE.md` §9.
 
@@ -400,3 +417,5 @@ distraction.
 - `SECURITY.md` — auth/authorization/payment security audit.
 - `OPTIMIZATION.md` — caching, image/font pipeline, and performance audit.
 - `ADMIN_CMS_AUDIT.md` — admin feature-parity backlog vs. Shopify Admin.
+- `../PREVIOUSUPDATE_FIX.MD` (repo root) — a short, recency-ordered changelog
+  of what shipped most recently and why.

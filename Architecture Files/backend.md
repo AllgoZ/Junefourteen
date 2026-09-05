@@ -96,7 +96,7 @@ everything under it only ever runs after `requireAdmin()`.
 ## 4. Database schema reference
 
 All tables live in `public`, created across `supabase/migrations/0001`–
-`0019` (§5). Full column-level detail and the *why* behind non-obvious
+`0021` (§5). Full column-level detail and the *why* behind non-obvious
 choices (join table instead of a single FK, snapshot columns, singleton
 tables) is in `ARCHITECTURE.md` §14 — this is the compact map.
 
@@ -195,7 +195,7 @@ is the source of truth.
 
 ## 5. Migrations
 
-Numbered SQL files in `supabase/migrations/` (`0001`…`0019` today), applied
+Numbered SQL files in `supabase/migrations/` (`0001`…`0021` today), applied
 in filename order by `supabase/scripts/run-migrations.ts`:
 
 ```
@@ -440,8 +440,9 @@ categories):
   `RAZORPAY_KEY_SECRET` (Checkout-callback signature scheme, §8),
   `RAZORPAY_WEBHOOK_SECRET` (webhook signature scheme, §8 — a different
   secret from `RAZORPAY_KEY_SECRET`, set per-mode from the Dashboard).
-- **Analytics**: `NEXT_PUBLIC_META_PIXEL_ID` (optional, storefront-only —
-  see `ARCHITECTURE.md` §23, `SECURITY.md` §10).
+- **Analytics**: `NEXT_PUBLIC_META_PIXEL_ID` and `NEXT_PUBLIC_GA_MEASUREMENT_ID`
+  (both optional, storefront-only — see `ARCHITECTURE.md` §23,
+  `SECURITY.md` §7/§10).
 
 ## 13. Backend-specific gotchas
 
@@ -498,3 +499,5 @@ categories):
 - `SECURITY.md` — auth/authorization/payment security audit; read this
   before touching anything in §6–§9 above.
 - `OPTIMIZATION.md` — caching/tag inventory in full, image/font pipeline.
+- `../PREVIOUSUPDATE_FIX.MD` (repo root) — a short, recency-ordered changelog
+  of what shipped most recently and why.

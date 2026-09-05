@@ -12,6 +12,11 @@ the hub; these are focused deep-dives, cross-linked both ways:
 - **`FRONTEND.md`** — practical frontend conventions: design tokens, core
   reusable components, state management, the forms/Server-Actions pattern,
   and frontend-specific gotchas. Start here before writing UI code.
+- **`backend.md`** — the equivalent "about to write backend code" companion:
+  Supabase client conventions, the repository/service/action layering, a
+  compact schema/RLS map, auth patterns, payments, rate limiting, and
+  backend-specific gotchas. Start here before writing a repository/service/
+  Server Action.
 - **`SECURITY.md`** — an authentication/authorization/payment/data-handling
   security audit, with a prioritized findings table.
 - **`OPTIMIZATION.md`** — a caching/rendering/image/font/query performance
@@ -19,6 +24,12 @@ the hub; these are focused deep-dives, cross-linked both ways:
 - **`ADMIN_CMS_AUDIT.md`** — admin feature-parity backlog vs. Shopify Admin
   (partially stale as of this writing — written before shipping/coupons/tax
   shipped, §17 below is the accurate current state for those).
+
+Also see `../PREVIOUSUPDATE_FIX.MD` (repo root) — a short, recency-ordered
+changelog of what shipped most recently and why, for a fast "what just
+happened" read before diving into this file's full history; and
+`../walkthrough.md` (repo root) — the plain-language, non-developer guide to
+running the admin panel day to day.
 
 ---
 
@@ -1804,6 +1815,13 @@ upload validation, the React Compiler).
   (`AddToCart`/`InitiateCheckout`/`Purchase`, GA4 `view_item`/`add_to_cart`/
   `purchase`), no Meta Conversions API, no GA4 Measurement Protocol / server
   tagging, no Google Ads / Signals linking.
+- **No per-piece stock/sold-out** — `product_pieces` (§14) has its own
+  `is_active` (hide a piece from the storefront entirely) but not its own
+  sold-out flag; `is_sold_out` stays product-level and the sole purchase
+  gate for a per-piece product exactly as for a normal one. If a single
+  piece (e.g. just the Dupatta) genuinely runs out while the rest of the
+  set is available, there's no way to reflect that today short of
+  deactivating the whole product.
 - See `SECURITY.md`'s findings table and `OPTIMIZATION.md`'s findings table
   for anything not listed here — both were re-checked as part of §22 and
   now mark each finding's actual status rather than leaving it open-ended.
