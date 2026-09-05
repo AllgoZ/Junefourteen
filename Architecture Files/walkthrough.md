@@ -2,7 +2,7 @@
 
 This is a plain-language guide to running the JUNEFOURTEEN website day to
 day. It's written for whoever manages the store — not for developers (see
-`Architecture Files/ARCHITECTURE.md` for the technical documentation).
+`ARCHITECTURE.md`, in this same folder, for the technical documentation).
 
 Every section below is listed in the same order it appears in the admin
 sidebar, so you can follow along top to bottom.
@@ -258,4 +258,4 @@ transaction will go through.
 For anything not covered here — a bug, a new feature, or a question about
 how something works under the hood — that's a conversation for your
 developer, not something to troubleshoot from this guide. The technical
-documentation for them lives in `Architecture Files/ARCHITECTURE.md`.
+documentation for them lives in `ARCHITECTURE.md`, in this same folder.

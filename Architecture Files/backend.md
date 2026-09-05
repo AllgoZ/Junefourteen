@@ -499,5 +499,5 @@ categories):
 - `SECURITY.md` — auth/authorization/payment security audit; read this
   before touching anything in §6–§9 above.
 - `OPTIMIZATION.md` — caching/tag inventory in full, image/font pipeline.
-- `../PREVIOUSUPDATE_FIX.MD` (repo root) — a short, recency-ordered changelog
+- `PREVIOUSUPDATE_FIX.MD` (same folder) — a short, recency-ordered changelog
   of what shipped most recently and why.

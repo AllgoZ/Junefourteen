@@ -1,7 +1,7 @@
 # JUNEFOURTEEN — Previous Update & Fix Log
 
 A short, **recency-ordered** record of what shipped most recently and why —
-read this before `Architecture Files/ARCHITECTURE.md`'s full history (§12) if
+read this before `ARCHITECTURE.md`'s full history (§12, same folder) if
 you just need "what happened lately" rather than the whole project story.
 Each entry names the commit(s), the files touched, and — for a fix — the
 actual root cause, not just the symptom. `ARCHITECTURE.md` remains the

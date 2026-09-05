@@ -417,5 +417,5 @@ distraction.
 - `SECURITY.md` — auth/authorization/payment security audit.
 - `OPTIMIZATION.md` — caching, image/font pipeline, and performance audit.
 - `ADMIN_CMS_AUDIT.md` — admin feature-parity backlog vs. Shopify Admin.
-- `../PREVIOUSUPDATE_FIX.MD` (repo root) — a short, recency-ordered changelog
+- `PREVIOUSUPDATE_FIX.MD` (same folder) — a short, recency-ordered changelog
   of what shipped most recently and why.

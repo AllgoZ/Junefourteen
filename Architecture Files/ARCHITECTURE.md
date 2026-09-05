@@ -25,10 +25,10 @@ the hub; these are focused deep-dives, cross-linked both ways:
   (partially stale as of this writing — written before shipping/coupons/tax
   shipped, §17 below is the accurate current state for those).
 
-Also see `../PREVIOUSUPDATE_FIX.MD` (repo root) — a short, recency-ordered
+Also see `PREVIOUSUPDATE_FIX.MD` (same folder) — a short, recency-ordered
 changelog of what shipped most recently and why, for a fast "what just
 happened" read before diving into this file's full history; and
-`../walkthrough.md` (repo root) — the plain-language, non-developer guide to
+`walkthrough.md` (same folder) — the plain-language, non-developer guide to
 running the admin panel day to day.
 
 ---
