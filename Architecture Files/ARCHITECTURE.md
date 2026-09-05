@@ -101,6 +101,8 @@ many sessions in this repo, from an empty directory.
   (images live in Cloudinary, not Supabase Storage). See §13.
 - **`cloudinary`** (server-only Node SDK) — product/collection image upload
   from the admin CMS. See §17.
+- **`resend`** (server-only Node SDK) — transactional email (new-order admin
+  alert, customer tracking/shipped emails). See §24.
 - **`server-only`** — guards `lib/supabase/admin.ts` and
   `lib/cloudinary/admin.ts` so the service-role key and API secret can never
   end up in a client bundle; throws unconditionally outside Next's bundler, so
@@ -1767,6 +1769,11 @@ NEXT_PUBLIC_META_PIXEL_ID                # optional — Meta Pixel id for the st
                                           # leave unset to ship zero tracking code. Storefront-only.
 NEXT_PUBLIC_GA_MEASUREMENT_ID            # optional — Google Analytics 4 measurement id (G-…) for the
                                           # storefront (§23). Not a secret; leave unset to ship no GA code.
+RESEND_API_KEY                           # server-only, §24 — transactional email (new-order/tracking/shipped).
+RESEND_FROM_EMAIL                        # optional, §24 — "Display Name <address@domain>"; falls back to
+                                          # Resend's unverified-domain sandbox sender if unset.
+NEXT_PUBLIC_SITE_URL                     # optional, §24 — not a secret; used only for links inside
+                                          # transactional emails. Defaults to https://www.junefourteen.in.
 ```
 
 **Migrations** (`supabase/migrations/*.sql`, numbered, applied in order):
@@ -1790,7 +1797,9 @@ account to `role = "admin"`.
 
 **Deployment checklist**: set all seven required env vars above in the hosting
 platform (plus `NEXT_PUBLIC_META_PIXEL_ID` / `NEXT_PUBLIC_GA_MEASUREMENT_ID`
-if using the Meta Pixel / Google Analytics, §23);
+if using the Meta Pixel / Google Analytics, §23; plus `RESEND_API_KEY` and,
+once a sending domain is verified in Resend, `RESEND_FROM_EMAIL` and
+`NEXT_PUBLIC_SITE_URL`, §24);
 run migrations + seed once against the target Supabase project;
 promote at least one admin account; confirm Supabase Auth's redirect
 URLs/allowed origins include the production domain; `npm run build` clean
@@ -2147,3 +2156,103 @@ ships zero tracking code.
   `add_to_cart`, `purchase`), no Measurement Protocol / server-side tagging,
   no Google Ads linking — same "add later as a contained change" position as
   the Pixel's custom events.
+
+## 24. Transactional email (Resend)
+
+Three server-triggered emails, added on direct request, all additive — no
+existing checkout/admin behavior was changed to make room for them, only
+narrowly-scoped reads/calls added around already-existing update points.
+
+- **`lib/email/resend.ts`** (`server-only`) — a lazy singleton `Resend`
+  client, same pattern as `lib/payments/razorpay.ts#getClient()`/
+  `lib/cloudinary/admin.ts`. Exports one function, `sendEmail({to, subject,
+  html})`, which **never throws** — a caught SDK error or exception is
+  `console.error`'d and swallowed. This is deliberate: none of the three
+  triggers below may ever turn an email problem into a broken checkout
+  confirmation or a broken admin action, the same "best-effort" discipline
+  already used elsewhere in this codebase (checkout's address-save,
+  `linkOrCreateAccountByMobile`, §16).
+- **`lib/email/templates.ts`** — pure HTML-string builders (`newOrderAdminEmailHtml`,
+  `orderTrackingEmailHtml`, `orderShippedEmailHtml`), no I/O, no new
+  dependency (no react-email — consistent with §2's light-footprint stance).
+  Every interpolated value (customer name, address, tracking number, coupon
+  code, …) goes through a local `escapeHtml()` first, since these strings
+  originate from customer/admin input. Reuses `formatPrice` (`lib/format.ts`)
+  and the same `shipping_address` JSON shape already parsed by
+  `app/admin/(protected)/orders/[id]/page.tsx`'s `AddressBlock`. Links back
+  to the site use a dedicated `NEXT_PUBLIC_SITE_URL` env var, **not**
+  `lib/config/site.ts`'s `url` field — that field is a stale
+  `https://www.junefourteen.example` placeholder left over from scaffolding,
+  never corrected; fixing it was out of scope for this change (told not to
+  touch unrelated code), so the email templates default to the real
+  `https://www.junefourteen.in` independently instead. Worth fixing `site.ts`
+  itself in a future pass so nothing else silently depends on the same stale
+  value.
+- **`lib/email/order-notifications.ts`** — the orchestration layer actually
+  imported by application code: `notifyAdminOfNewOrder(orderId)` (re-fetches
+  the order + items via the existing `getOrderForAdmin`, §17/§23's sibling
+  pattern, and emails `site.contactEmail`), `notifyCustomerOfTracking(order)`
+  and `notifyCustomerOfShipped(order)` (each takes an already-fetched order
+  row and emails `order.email`). Each function has its own `try/catch`
+  around the whole body (not just relying on `sendEmail`'s own), since
+  `notifyAdminOfNewOrder` also does a DB read that could itself throw.
+
+**Trigger 1 — new-order alert to the team inbox.** Fires once per order, the
+moment its payment is actually confirmed — **not** when the `orders` row is
+first inserted. `createOrderAction` (`app/(site)/checkout/actions.ts`)
+creates a `payment_status: "pending"` row before Razorpay Checkout even
+opens, and an abandoned/closed-modal checkout leaves that row pending
+forever (§16) — emailing the team for every one of those would be noise, not
+a sale notification. The real "paid" transition happens in exactly two
+places, both already calling `markOrderPaid` (`lib/repositories/orders.ts`):
+`verifyRazorpayPaymentAction` (browser callback) and the Razorpay webhook
+route (`app/api/webhooks/razorpay/route.ts`, §22) — whichever reaches it
+first for a given order. Both call sites now also call
+`notifyAdminOfNewOrder(order.id)` immediately after `markOrderPaid`, gated on
+the order's payment status *before* that call (`verifyRazorpayPaymentAction`
+now selects `payment_status` too, purely additive to its existing select
+list) — so if both paths race for the same order (a documented, expected
+scenario, §22), only whichever one actually flips `pending → paid` sends the
+email, never both.
+
+**Trigger 2 — tracking-added email to the customer.**
+`updateOrderTrackingAction` (`app/admin/(protected)/orders/actions.ts`) now
+reads the order via `getOrderForAdmin` *before* calling the existing,
+unchanged `updateOrderTrackingForAdmin`, and emails the customer only if the
+submitted tracking number/URL is non-empty **and** actually differs from
+what was already stored — otherwise re-opening and re-saving the same
+Tracking form (its fields are pre-filled from the current row) would email
+the customer again for no reason.
+
+**Trigger 3 — shipped email to the customer.** Same shape,
+`updateOrderStatusAction`: reads the order first, calls the existing
+`updateOrderStatusForAdmin` unchanged, and emails the customer only on a
+genuine `→ "shipped"` transition (previous status wasn't already
+`"shipped"`) — not on every unrelated status-field resave. If tracking was
+already set on the order, the shipped email includes it (both customer
+emails render the same `trackingBlockHtml`, so whichever info exists on the
+order at send time is what shows).
+
+**No verified sending domain yet.** Checked directly via `GET
+https://api.resend.com/domains` with the provided key — empty list. Without
+one, `lib/email/resend.ts` falls back to Resend's own unverified-domain
+sandbox sender, `onboarding@resend.dev`. **Verified live**: a real send from
+that sandbox sender to `team.Junefourteen@gmail.com` (the admin address,
+`site.contactEmail`) came back `last_event: "delivered"` when polled back
+from Resend's own API — so the new-order admin alert works today, as-is, no
+further setup required. Sending to arbitrary **customer** addresses (the
+tracking/shipped emails) was not verified against a real inbox and Resend's
+own guidance is that a verified domain is required to reliably send
+production email to recipients who aren't the account's own address —
+treat that path as unconfirmed until a real order/tracking-update is tried
+against a real customer inbox. To remove this caveat entirely: verify a
+domain (e.g. `junefourteen.in`) in the Resend dashboard (add the DNS records
+it gives you, wherever the domain's DNS is managed) and set
+`RESEND_FROM_EMAIL` to an address on that domain — no code change needed
+once that's done, only the env var.
+
+**Env vars** (§20): `RESEND_API_KEY` (server-only secret), `RESEND_FROM_EMAIL`
+(optional, `"Display Name <address@domain>"`, defaults to the sandbox sender
+above), `NEXT_PUBLIC_SITE_URL` (not a secret, defaults to
+`https://www.junefourteen.in` if unset — used only for links inside these
+emails, see the stale-`site.url` note above).

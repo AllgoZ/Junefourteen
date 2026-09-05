@@ -14,6 +14,47 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-09-05 — Transactional email via Resend (new-order alert + customer tracking/shipped emails)
+
+Three additive server-triggered emails, no existing checkout/admin behavior
+changed to make room for them:
+
+1. **New-order alert to the team inbox** (`site.contactEmail`,
+   `team.Junefourteen@gmail.com`) — fires once per order, on the
+   `pending → paid` transition (not on cart/order-row creation, which can be
+   abandoned before payment — see `ARCHITECTURE.md` §24 for why). Wired into
+   both places that call `markOrderPaid`: `verifyRazorpayPaymentAction`
+   (`app/(site)/checkout/actions.ts`) and the Razorpay webhook
+   (`app/api/webhooks/razorpay/route.ts`) — whichever reaches "paid" first
+   for a given order sends it, gated so the other can't send a duplicate.
+2. **Tracking-added email to the customer** — `updateOrderTrackingAction`
+   (`app/admin/(protected)/orders/actions.ts`) now emails `orders.email` when
+   the admin sets a new/changed tracking number or URL (not on a no-op
+   resave of the same values).
+3. **Shipped email to the customer** — `updateOrderStatusAction` emails
+   `orders.email` the moment an order's status genuinely transitions to
+   `"shipped"` (not on every status-field resave).
+
+New: `lib/email/resend.ts` (server-only Resend client, never throws —
+matches this app's existing best-effort-notification discipline),
+`lib/email/templates.ts` (HTML builders, escapes every interpolated value),
+`lib/email/order-notifications.ts` (the three notify functions above).
+`resend` added as a dependency (`npm audit`: 0 vulnerabilities after).
+
+**Verified live**: a real send from the fallback sandbox sender
+(`onboarding@resend.dev` — no domain is verified in the Resend account yet)
+to `team.Junefourteen@gmail.com` came back `delivered` when polled from
+Resend's own API, so the admin alert works today with zero further setup.
+The customer-facing tracking/shipped path was **not** verified against a
+real customer inbox — Resend's guidance is that reliable delivery to
+arbitrary recipients needs a verified sending domain. Verifying one (e.g.
+`junefourteen.in`, in the Resend dashboard) and setting `RESEND_FROM_EMAIL`
+closes this gap with no code change.
+
+Docs: `ARCHITECTURE.md` new §24, §2 (dependency), §20 (env vars).
+
+---
+
 ## 2026-09-05 — Real favicon added (the site had never actually had one)
 
 Added the brand's "JF" monogram (`app/logo/favicon.svg`, moved into place)

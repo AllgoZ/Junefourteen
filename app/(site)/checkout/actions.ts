@@ -12,6 +12,7 @@ import { createRazorpayOrder, verifyRazorpaySignature } from "@/lib/payments/raz
 import { getActiveTaxRate } from "@/lib/services/tax";
 import { validateCoupon, recordCouponUsage } from "@/lib/services/coupons";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { notifyAdminOfNewOrder } from "@/lib/email/order-notifications";
 import type { CartItem } from "@/types/cart";
 import type { ShippingEstimateInput, ShippingEstimateResult } from "@/types/shipping";
 
@@ -276,7 +277,7 @@ export async function verifyRazorpayPaymentAction(input: VerifyPaymentInput): Pr
 
   const { data: order, error: orderError } = await admin
     .from("orders")
-    .select("id, order_number, user_id, razorpay_order_id")
+    .select("id, order_number, user_id, razorpay_order_id, payment_status")
     .eq("id", input.orderId)
     .maybeSingle();
 
@@ -284,7 +285,13 @@ export async function verifyRazorpayPaymentAction(input: VerifyPaymentInput): Pr
     return { error: "Could not confirm this order. Please contact support if you were charged." };
   }
 
+  const wasAlreadyPaid = order.payment_status === "paid";
   await markOrderPaid(admin, order.id, input.razorpayPaymentId);
+
+  if (!wasAlreadyPaid) {
+    // Best-effort — never blocks payment confirmation from returning to the customer.
+    await notifyAdminOfNewOrder(order.id);
+  }
 
   if (order.user_id) {
     const supabase = await createClient();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyRazorpayWebhookSignature } from "@/lib/payments/razorpay";
 import { markOrderPaid } from "@/lib/repositories/orders";
+import { notifyAdminOfNewOrder } from "@/lib/email/order-notifications";
 
 interface RazorpayPaymentEntity {
   id: string;
@@ -91,6 +92,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     // confirmation path, is a no-op rather than a duplicate transition.
     if (order.payment_status !== "paid") {
       await markOrderPaid(admin, order.id, payment.id);
+      // Best-effort — never turns a genuine webhook confirmation into a failure response.
+      await notifyAdminOfNewOrder(order.id);
     }
 
     return NextResponse.json({ received: true });
