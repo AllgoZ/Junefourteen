@@ -144,11 +144,23 @@ Supabase project.
 
 ```
 app/
+  favicon.ico                The brand mark (a "JF" monogram), multi-resolution (16/32/48px).
+                              Must live at this exact top level, not inside (site)/ or admin/ —
+                              unlike icon/apple-icon (below), Next's favicon.ico convention is
+                              NOT honored inside a route group (confirmed the hard way, §9) — but
+                              a top-level app/favicon.ico *is* correctly inherited by both (site)/
+                              and admin/'s separate root layouts, so one file covers both apps.
   (site)/                    The entire storefront — its own root layout (own <html>/<body>,
                               CartProvider/WishlistProvider/SiteHeader/SiteFooter), see §17 for
                               why. Route group folder name is stripped from the URL, so this
                               changes nothing about the public route table (§5).
+    icon.svg                   The same monogram as an SVG — modern browsers prefer this over
+                                favicon.ico for the tab icon; Next auto-emits the <link rel="icon">
+                                tag (§9's `icon`/`apple-icon` convention, unlike favicon.ico this
+                                one *is* route-group-safe).
   admin/                      Admin CMS — separate root layout, no storefront chrome. See §17.
+    icon.svg                   Same monogram again, so the admin tab matches the storefront's
+                                (favicon.ico alone would already cover it, but the SVG is crisper).
     login/                     Not gated (would otherwise redirect to itself).
     (protected)/                requireAdmin()-gated group: dashboard, products, collections,
                                 orders, customers, settings.
@@ -541,6 +553,23 @@ exact Next 16.3.0 install per its own bundled docs — checked rather than
 assumed, since AGENTS.md warns this version's conventions can differ from
 training data), set to `"10mb"` here. Requires a dev-server restart to
 take effect — `next.config.ts` isn't hot-reloaded.
+
+### 9.18 `favicon.ico`'s file convention is not route-group-safe — `icon`/`apple-icon`'s is
+Next's own docs list `favicon`'s valid location as just `app/` versus
+`icon`/`apple-icon`'s `app/**/*`, and this is a real, enforced restriction,
+not just a style suggestion: `app/(site)/favicon.ico` (its location from the
+original frontend prototype onward, apparently never noticed as broken)
+silently 404s in production — confirmed directly, not assumed, while adding
+a real favicon (previously the site had none — the `.ico` file sat there
+inert this whole time). Moving the same file to the true top level,
+`app/favicon.ico`, immediately started serving correctly at `/favicon.ico`
+**and** is inherited by both `(site)/` and `admin/`'s separate root layouts
+— one file, both apps, despite the two-root-layouts structure (§17) that
+usually means "duplicate everything." `icon.svg`/`apple-icon.png` have no
+such restriction and were placed per-root-layout instead
+(`app/(site)/icon.svg`, `app/admin/icon.svg`) specifically so each app could
+have its own crisp, scalable tab icon rather than relying solely on the
+shared `.ico` fallback.
 
 ## 10. Design system (current baseline — see §12 for how it got here)
 

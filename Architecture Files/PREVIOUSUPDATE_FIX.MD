@@ -14,6 +14,38 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-09-05 — Real favicon added (the site had never actually had one)
+
+Added the brand's "JF" monogram (`app/logo/favicon.svg`, moved into place)
+as the site's favicon, and along the way found that the site had **never
+had a working one**: `app/(site)/favicon.ico` had sat there since the
+original frontend prototype, but Next's `favicon.ico` file convention is
+only honored at the literal top level of `app/` — **not** inside a route
+group like `(site)/` — so it silently 404'd in production the whole time
+(confirmed directly with a real build + server, not assumed).
+
+- **`app/favicon.ico`** (moved to the true top level, multi-resolution
+  16/32/48px — rasterized from the SVG with headless Chromium + assembled
+  with `png-to-ico`, both one-off tools, not new project dependencies) — now
+  correctly served at `/favicon.ico` and inherited by **both** `(site)/` and
+  `admin/`'s separate root layouts from the one file.
+- **`app/(site)/icon.svg`** and **`app/admin/icon.svg`** — the same
+  monogram as SVG, one per root layout (this convention *is* route-group-safe,
+  unlike `favicon.ico`) — Next auto-emits the modern `<link rel="icon"
+  type="image/svg+xml">` tag, which browsers prefer over the `.ico` fallback.
+- `app/logo/` (the drop-in source location) removed now that the file lives
+  where it's actually used.
+
+Verified with a real production build + server: `/favicon.ico` returns the
+new file byte-for-byte; both `/` and `/admin/login` render both `<link
+rel="icon">` tags (the shared `.ico` and their own `icon.svg`) in the actual
+HTML `<head>`, not just in theory. No other code changed.
+
+Docs: `ARCHITECTURE.md` §4 (repo structure) and new §9.18 (the route-group
+gotcha, so nobody re-discovers this the hard way).
+
+---
+
 ## 2026-09-02 — Homepage header white-bar flash, fixed for real (root cause was SSR, not JS timing)
 
 **Commit:** `e709f8d`
