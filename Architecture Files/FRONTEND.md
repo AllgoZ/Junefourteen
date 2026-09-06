@@ -51,7 +51,11 @@ components/
                writing a new primitive, most needs are already covered
   layout/      Container, SiteHeader, SiteFooter, MobileNav
   home/        Homepage sections (hero, collections, scroll showcase, campaign
-               banner, social grid) — see §7 below
+               banner, social grid) — see §7 below. offer-popup.tsx is a
+               client island (Radix Dialog, image-only) mounted once in
+               app/(site)/page.tsx — opens ~500ms after first load, persists
+               dismissal in localStorage keyed on the image URL, renders null
+               when there's no active offer (ARCHITECTURE.md §17)
   product/     Card/grid/gallery/image, size & custom-size flow, add-to-bag
                panel, request-to-order-dialog.tsx (the sold-out-product
                lead-capture form, mobile-keyboard-safe per §9),
@@ -67,8 +71,10 @@ components/
   shop/        FilterBarDesktop (Popover bar), FilterSheet/SortSheet (mobile)
   admin/       Admin nav + every entity form (product/collection/banner/
                shipping-zone/coupon/campaign-banner/gallery-images-form/
-               about-page-form/legal-page-form) — see §8 for the shared form
-               pattern, incl. the stay-on-page variant these last two use.
+               about-page-form/legal-page-form/offer-popup-form) — see §8 for
+               the shared form pattern, incl. the stay-on-page variant the
+               singleton forms use. offer-popup-form.tsx is an AdminCard on
+               /admin/banners over the offer_popup singleton.
                product-form.tsx also has a Size Chart image card and a
                repeatable Pieces & Pricing list (hidden-JSON-input, like
                SocialLinksForm) — ARCHITECTURE.md §17
@@ -243,9 +249,10 @@ return (
 );
 ```
 
-**Stay-on-page** (`about-page-form.tsx`, `legal-page-form.tsx`, and the
-Settings-tab forms — Tax, Social Links) — singleton/settings content with no
-list to return to, since the form itself *is* the destination:
+**Stay-on-page** (`about-page-form.tsx`, `legal-page-form.tsx`,
+`offer-popup-form.tsx`, and the Settings-tab forms — Tax, Social Links) —
+singleton/settings content with no list to return to, since the form itself
+*is* the destination:
 
 ```tsx
 useEffect(() => {
@@ -277,7 +284,7 @@ callback the parent has no way to know an upload is in flight.
 **Live image preview before upload**: don't use `next/image` for a
 not-yet-uploaded file — its `src` can only be a real URL, not a `blob:`
 object URL. Use a plain `<img>` (see `BannerPreviewFrame`,
-`CampaignBannerForm`, `GalleryImagesForm`) with
+`CampaignBannerForm`, `GalleryImagesForm`, `OfferPopupForm`) with
 `src={preview ?? existingUrl}` where `preview` is set from
 `URL.createObjectURL(file)` in the file input's `onChange`.
 
@@ -339,7 +346,13 @@ the format is deliberately this narrow.
   primitive for every dialog. When the override is non-obvious, verify the
   *actual* merged class string in a throwaway script rather than assuming
   `tailwind-merge` resolved the conflict the way you expect — cheap
-  insurance against a silently-losing override.
+  insurance against a silently-losing override. `components/home/offer-popup.tsx`
+  is the fullest example: `showCloseButton={false}` +
+  `aria-describedby={undefined}` + a `sr-only` `<DialogTitle>` for an
+  image-only dialog with a custom close button, plus
+  `bg-transparent p-0 border-0 ring-0 sm:max-w-none` and an inline
+  `style={{ width: "min(<px>, calc(100vw - 2rem))" }}` for the admin-set
+  popup width.
 - **`usePathname()` can resolve to `null` during the static prerender of a
   route on some hosts (observed on Vercel), even for a route with no
   dynamic params** — a local `next build` can resolve it correctly while the

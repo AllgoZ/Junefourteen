@@ -6,6 +6,7 @@ import { CampaignImage } from "@/components/home/campaign-image";
 import { ScrollShowcaseSection } from "@/components/home/scroll-showcase-section";
 import { ProductGrid } from "@/components/product/product-grid";
 import { SocialSection } from "@/components/home/social-section";
+import { OfferPopup } from "@/components/home/offer-popup";
 import {
   getBestSellers,
   getCollections,
@@ -14,19 +15,23 @@ import {
 } from "@/lib/services/products";
 import { getBanners } from "@/lib/services/banners";
 import { getCampaignBanner } from "@/lib/services/homepage";
+import { getOfferPopup } from "@/lib/services/offer-popup";
 
 export default async function HomePage() {
-  const [banners, collections, newArrivals, bestSellers, blackEdit, campaignBanner] = await Promise.all([
+  const [banners, collections, newArrivals, bestSellers, blackEdit, campaignBanner, offerPopup] = await Promise.all([
     getBanners(),
     getCollections(),
     getNewArrivals(6),
     getBestSellers(6),
     getProducts({ collectionSlugs: ["black-edit"] }),
     getCampaignBanner(),
+    getOfferPopup(),
   ]);
 
   return (
     <>
+      <OfferPopup popup={offerPopup} />
+
       <HeroSection banners={banners} />
 
       <HomeSection title="Collections" compact>

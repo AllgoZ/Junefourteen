@@ -14,6 +14,69 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-09-06 — Homepage offer popup (image-only, admin-managed)
+
+A clean, minimalistic promotional popup on the homepage: one
+admin-uploaded image (no text of its own — offer copy, terms, and the
+call-to-action all live in the image), shown **once** when a visitor first
+loads the site, with exactly two interactions — click the image (goes to
+an admin-set link) or close it. It does not reappear for that visitor
+until the admin uploads a *new* image.
+
+**Entirely additive — no existing storefront or admin behavior changed.**
+New files only, plus tightly-scoped additions to `app/(site)/page.tsx`
+(mount the client island), `app/admin/(protected)/banners/page.tsx` (one
+`AdminCard`), and `lib/supabase/types.ts` (the `offer_popup` Row/Insert/
+Update block).
+
+- **DB** — `supabase/migrations/0022_offer_popup.sql`: an `offer_popup`
+  singleton table (same `id boolean primary key default true check (id)`
+  trick as `tax_settings`/`homepage_campaign`), RLS-enabled with no
+  policies (service-role only). `image_url`/`cloudinary_public_id`/
+  `image_alt`/`image_width`/`image_height`, optional `link_href`,
+  `display_width_px` (`check between 240 and 900 default 420`),
+  `is_active`. **Seeded inactive with no image**, so the storefront is
+  byte-identical until an admin sets one up. Applied to the live DB;
+  schema verified by direct query.
+- **Read path** — `lib/services/offer-popup.ts#getOfferPopup`
+  (`unstable_cache`, tag `"offer-popup"`, `revalidate: 3600`), mirrors
+  `getCampaignBanner`. Returns `null` unless the row is active *and* has
+  an image.
+- **Storefront** — `components/home/offer-popup.tsx`, a client island
+  mounted once as the first child in `app/(site)/page.tsx`. Radix
+  `Dialog` with a `sr-only` title + custom close button, image-only
+  (wrapped in a `<Link>` when a link is set). Opens ~500ms after first
+  load; every dismissal path (X, Escape, backdrop, clicking the image)
+  writes `localStorage["jf:offer-popup-seen"] = <image URL>`, so it never
+  reappears for that visitor until a new image is uploaded. Renders
+  nothing in the SSR HTML (dialog closed) — homepage stays statically
+  prerendered (`○`), no hydration mismatch.
+- **Admin** — an "Offer Popup" `AdminCard` at the top of `/admin/banners`
+  (`components/admin/offer-popup-form.tsx` → `saveOfferPopupAction` in
+  `app/admin/(protected)/banners/offer-popup-actions.ts`,
+  `lib/repositories/admin/offer-popup.ts`). Single-image card modelled on
+  `CampaignBannerForm`: image upload (blob preview, old-asset cleanup,
+  "Remove current image"), alt text, optional link, width input (clamped
+  240–900), on/off toggle. Action does
+  `revalidateTag("offer-popup", "max")` + `revalidatePath("/")`. Placed
+  here by explicit request ("add a section or under Banners"); does not
+  touch the banner CRUD table/actions on the same page.
+
+**Verified** with headless Chromium against a local production build with
+a real test offer row: popup opens ~500ms after load at the configured
+width; the X button, Escape, backdrop-click, and clicking the image all
+close it and persist to `localStorage`; a reload does **not** reopen it; a
+visitor who dismissed a *different* image still sees the new one once;
+clicking the image navigates to the link and closes. With the popup
+inactive (the seeded default) the homepage HTML has no dialog markup at
+all. Test row cleared from the live DB afterward. `tsc`/`lint`/`build`
+clean.
+
+Docs: `ARCHITECTURE.md` §4/§14/§17/§19, `backend.md` §4/§5/§6,
+`FRONTEND.md` §3/§8/§9, `OPTIMIZATION.md` §2.
+
+---
+
 ## 2026-09-05 — Transactional email via Resend (new-order alert + customer tracking/shipped emails)
 
 Three additive server-triggered emails, no existing checkout/admin behavior

@@ -544,6 +544,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["homepage_campaign"]["Insert"]>;
         Relationships: [];
       };
+      offer_popup: {
+        Row: {
+          id: boolean;
+          image_url: string | null;
+          cloudinary_public_id: string | null;
+          image_alt: string;
+          image_width: number | null;
+          image_height: number | null;
+          link_href: string | null;
+          display_width_px: number;
+          is_active: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          image_url?: string | null;
+          cloudinary_public_id?: string | null;
+          image_alt?: string;
+          image_width?: number | null;
+          image_height?: number | null;
+          link_href?: string | null;
+          display_width_px?: number;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["offer_popup"]["Insert"]>;
+        Relationships: [];
+      };
       homepage_gallery_images: {
         Row: {
           id: string;

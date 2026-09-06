@@ -66,6 +66,7 @@ Every `lib/services/*.ts` cache and its matching admin-mutation
 | `tax.ts` | `tax-settings` | settings actions |
 | `coupons.ts` | *(not cached — see below)* | — |
 | `homepage.ts` | `homepage-campaign`, `homepage-gallery-images` | collections admin actions |
+| `offer-popup.ts` | `offer-popup` | banners admin action (`saveOfferPopupAction`) |
 
 `lib/services/coupons.ts#validateCoupon` is **deliberately never cached** —
 correctly so, since usage limits and expiry windows must be checked against

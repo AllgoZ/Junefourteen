@@ -172,7 +172,8 @@ components/
   cart/                     Cart drawer, line item, shipping estimator
   checkout/                 Checkout form + order summary (now wired to app/(site)/checkout/actions.ts, §16)
   home/                     Homepage sections — hero carousel, collections, scroll showcase
-                             (Best Sellers + Black Edit), campaign banners, social grid
+                             (Best Sellers + Black Edit), campaign banners, social grid,
+                             offer popup (offer-popup.tsx, §17)
   layout/                   Container, SiteHeader, SiteFooter, MobileNav
                              (no newsletter form anymore — removed, see §12 step 12)
   marketing/                StaticPage wrapper + ContactForm (used by about/contact/legal pages)
@@ -1067,7 +1068,7 @@ a few hundred products.
 
 ## 14. Database schema & RLS
 
-Twenty-five tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
+Twenty-six tables, all in `supabase/migrations/0001_schema.sql` (+ `0002_
 triggers.sql`, `0003_rls.sql`, `0004_lockdown_internal.sql`, `0005_profile_
 email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0009_banner_mobile_image.sql`, `0010_banner_content_fields.sql`,
@@ -1076,7 +1077,7 @@ email.sql`, `0006_banners.sql`, `0007_social_links.sql`, `0008_inventory.sql`,
 `0015_razorpay_webhook_and_rate_limits.sql`, `0016_about_page_content.sql`,
 `0017_legal_pages.sql`, `0018_order_requests.sql`,
 `0019_order_requests_user_id.sql`, `0020_product_size_chart.sql`,
-`0021_product_pieces.sql`
+`0021_product_pieces.sql`, `0022_offer_popup.sql`
 — `0008`/`0011`/`0012`/`0019`/`0020` are plain `alter table` additions with no new table
 (`0020` adds `products.size_chart_image_url`/`_cloudinary_public_id`/`_image_alt`
 — an optional per-product size-chart image, §17),
@@ -1112,6 +1113,7 @@ and `everyday-edit`), which a single FK can't represent.
 | `tax_settings` | `0013` — a **singleton row** (`id boolean primary key default true check (id)`, the standard Postgres one-row-table trick; the migration inserts that one row itself). `rate_percent`, `label`, `is_active` — one global rate, off by default. |
 | `homepage_campaign` | `0014` — another **singleton row**, same trick as `tax_settings`. Backs the full-bleed "Shop Collection" banner between the Best Sellers scroll showcase and the Follow Along grid on the homepage: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, plus `link_label`/`link_href` for its single clickable CTA. Seeded with the exact values that were previously hardcoded in `app/(site)/page.tsx`. RLS-enabled with no policies (service-role client only), same as `tax_settings`/`shipping_zones`. |
 | `homepage_gallery_images` | `0014` — the four photos in the "Follow Along" Instagram-style grid: `image_url`/`cloudinary_public_id`/`image_alt`/`tone`, `sort_order`, `is_active`. Seeded with the same four `GALLERY_IMAGES` paths and `TILE_TONES` values `social-section.tsx` used to hardcode. Each tile is edited independently in the admin (no add/remove/reorder UI — the storefront grid layout assumes a fixed set), same RLS-locked-down shape as `shipping_zones`. |
+| `offer_popup` | `0022` — another **singleton row**, same trick as `tax_settings`/`homepage_campaign`. Backs the homepage promotional popup (§17): one admin-uploaded image (`image_url`/`cloudinary_public_id`/`image_alt`/`image_width`/`image_height`), an optional `link_href` (the image is a `<Link>` to it, else clicking just closes), `display_width_px` (`integer check between 240 and 900 default 420` — the popup's on-screen width), and `is_active`. **Seeded inactive with no image**, so the storefront is byte-identical until an admin uploads an image *and* toggles it on. RLS-enabled with no policies (service-role client only), same as `homepage_campaign`. The "show once, don't repeat" behaviour is client-side `localStorage` keyed on the image URL — no per-visitor state in the DB. |
 | `rate_limit_hits` | `0015` — backs `lib/rate-limit.ts`'s Postgres-based fixed-window limiter (§22): `key` (a `"bucket:identifier"` string) + `created_at`. Rows are short-lived (opportunistic cleanup inside the limiter itself, no cron); chosen over in-memory/Redis specifically because no process here can hold a counter safely across serverless instances. Same RLS-locked-down, service-role-only shape as `shipping_zones`. |
 | `about_page_content` | `0016` — another **singleton row**. Backs every text field and the three images (`hero_*`/`story_*`/`philosophy_*`, plus `journal_*` text with no image) on `/about`, editable from `/admin/about` (§17). Seeded with the exact copy `app/(site)/about/page.tsx` had hardcoded before — verified via direct query to match byte-for-byte. Same RLS-locked-down shape as `tax_settings`/`homepage_campaign`. |
 | `legal_pages` | `0017` — **two named rows**, not a boolean-singleton (`slug text primary key check (slug in ('privacy', 'terms'))`) — `title`, `subtitle`, `body` (free text, not fixed columns; see §17's write-up of `LegalPageBody`'s parsing convention), editable from `/admin/legal`. Seeded with the exact copy `/privacy`/`/terms` had hardcoded before. Same RLS-locked-down shape as `about_page_content`. |
@@ -1544,6 +1546,28 @@ file — both are derived from the same reference-viewport numbers so they
 can't silently disagree with each other the way they did in an earlier pass
 (preview frame at one arbitrary ratio, copy suggesting a different one).
 
+The `/admin/banners` list page also carries one `AdminCard` above the
+banner table — **Offer Popup** (`components/admin/offer-popup-form.tsx` →
+`saveOfferPopupAction` in `app/admin/(protected)/banners/offer-popup-
+actions.ts`), over the `offer_popup` singleton (§14). A single-image card
+modelled exactly on `CampaignBannerForm`: image upload (blob-preview
+`<img>`, `uploadImage(buffer, "offer-popup")` + old-asset `deleteImage`,
+"Remove current image" checkbox) + alt text + optional link URL +
+`display_width_px` number input (clamped 240–900) + an "Show this popup on
+the homepage" toggle over `is_active`. The action `revalidateTag("offer-
+popup", "max")` + `revalidatePath("/")` on save. Placed here by explicit
+request ("add a section or under Banners"); it doesn't touch the banner
+CRUD table/actions on the same page. On the storefront the popup is
+`components/home/offer-popup.tsx`, a client island mounted once as the
+first child in `app/(site)/page.tsx` — a Radix `Dialog` with a `sr-only`
+title and a custom close button, showing just the image (wrapped in a
+`<Link>` when a link is set). It opens ~500ms after first load and writes
+`localStorage["jf:offer-popup-seen"] = <image URL>` on any dismissal (X,
+Escape, backdrop, or clicking the image), so it never reappears for that
+visitor until the admin uploads a *new* image. Renders `null` entirely
+when there's no active offer — the default seeded state — so the homepage
+is unchanged until an admin sets one up.
+
 On the storefront, `hero-section.tsx` is text-free except for one small
 bottom-right link — always rendered, unconditionally, reading
 `banner.link` (`label` defaults to "Shop Now", `href` to `/shop`) — plus
@@ -1719,10 +1743,10 @@ Non-Cloudinary sources (the handful of homepage sections still using local
 Classic Next model, not Cache Components (§9.11). `lib/services/products.ts`
 wraps its two base fetchers (`listActiveProducts`→mapped, `listActiveCollections`
 →mapped) in `unstable_cache` tagged `"products"`/`"collections"`,
-`revalidate: 3600`; `lib/services/banners.ts`/`social-links.ts`/`homepage.ts`/`about.ts`
+`revalidate: 3600`; `lib/services/banners.ts`/`social-links.ts`/`homepage.ts`/`about.ts`/`offer-popup.ts`
 follow the identical pattern, tagged `"banners"`/`"social-links"`/
-`"homepage-campaign"`/`"homepage-gallery-images"`/`"about-page"` — every
-banner/social-link/homepage-media/about-page admin mutation calls the
+`"homepage-campaign"`/`"homepage-gallery-images"`/`"about-page"`/`"offer-popup"` — every
+banner/social-link/homepage-media/about-page/offer-popup admin mutation calls the
 matching `revalidateTag(tag, "max")`.
 `getProductBySlug`/`getCollectionBySlug` additionally tag
 their own entry (`product:<slug>`/`collection:<slug>`) via a wrapper created

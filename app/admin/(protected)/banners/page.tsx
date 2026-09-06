@@ -6,16 +6,22 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listAllBannersForAdmin } from "@/lib/repositories/admin/banners";
+import { getOfferPopupForAdmin } from "@/lib/repositories/admin/offer-popup";
 import { setBannerActiveAction } from "@/app/admin/(protected)/banners/actions";
 import { PageHeader } from "@/components/admin/ui/page-header";
+import { AdminCard } from "@/components/admin/ui/card";
 import { BannerBulkUpload } from "@/components/admin/banner-bulk-upload";
+import { OfferPopupForm } from "@/components/admin/offer-popup-form";
 import cloudinaryLoader from "@/lib/cloudinary/loader";
 
 export const metadata = { title: "Banners" };
 
 export default async function AdminBannersPage() {
   const admin = createAdminClient();
-  const banners = await listAllBannersForAdmin(admin);
+  const [banners, offerPopup] = await Promise.all([
+    listAllBannersForAdmin(admin),
+    getOfferPopupForAdmin(admin),
+  ]);
 
   return (
     <div>
@@ -28,6 +34,14 @@ export default async function AdminBannersPage() {
           </Button>
         }
       />
+
+      <AdminCard
+        className="mb-6"
+        title="Offer Popup"
+        description="A promotional image shown once on the homepage when a visitor first arrives — clicking it opens the link you set, and it won't show them again until you upload a new image."
+      >
+        <OfferPopupForm popup={offerPopup} />
+      </AdminCard>
 
       <BannerBulkUpload />
 

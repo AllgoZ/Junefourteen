@@ -115,6 +115,28 @@ can:
   active means a static hero image, more than one means it rotates.
 - Reorder or deactivate individual banners.
 
+### Offer Popup
+
+At the top of the Banners page is a card called **Offer Popup** — a clean,
+image-only popup for promotions and offers that appears once when a visitor
+first opens the site.
+
+- **Upload one image** — everything (the offer text, terms, the "Shop Now"
+  call-to-action) should be part of the image itself; the popup shows no
+  text of its own. A portrait image around 900×1200px works best.
+- **Link URL** (optional) — where clicking the image takes the visitor.
+  Leave it blank and clicking the image just closes the popup.
+- **Popup Width (px)** — how wide the popup shows on screen (240–900).
+  Portrait offer images look best around 380–460.
+- **Show this popup on the homepage** — the on/off switch. Turn it off to
+  hide the popup without losing the image.
+
+It shows **once per visitor**: after someone closes it, they won't see it
+again — until you upload a **new** image, which everyone sees once. Just
+toggling it off and back on with the same image does *not* re-show it to
+people who already closed it. While no image is uploaded (or the switch is
+off), the homepage is completely unchanged.
+
 ---
 
 ## About Page

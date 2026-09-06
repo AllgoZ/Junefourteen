@@ -96,7 +96,7 @@ everything under it only ever runs after `requireAdmin()`.
 ## 4. Database schema reference
 
 All tables live in `public`, created across `supabase/migrations/0001`–
-`0021` (§5). Full column-level detail and the *why* behind non-obvious
+`0022` (§5). Full column-level detail and the *why* behind non-obvious
 choices (join table instead of a single FK, snapshot columns, singleton
 tables) is in `ARCHITECTURE.md` §14 — this is the compact map.
 
@@ -169,12 +169,17 @@ storefront section needs it)
   flagged `is_default`.
 - `coupons` — `discount_type` (`percentage`/`fixed`), `times_used` is
   server-incremented at order time, never client-writable.
-- `tax_settings`, `homepage_campaign`, `about_page_content` — **singleton
-  tables**: `id boolean primary key default true check (id)`, so a second
-  `insert` always collides with the PK. Always `update`, never `insert`,
-  after the seed row.
+- `tax_settings`, `homepage_campaign`, `about_page_content`, `offer_popup` —
+  **singleton tables**: `id boolean primary key default true check (id)`, so
+  a second `insert` always collides with the PK. Always `update`, never
+  `insert`, after the seed row.
 - `homepage_gallery_images` — the 4-tile "Follow Along" grid, a real list
   (not a singleton) despite being a fixed count in the UI today.
+- `offer_popup` (0022) — backs the homepage promotional popup (one
+  admin-uploaded image, optional link, `display_width_px`, `is_active`).
+  Seeded inactive with no image, so the storefront is unchanged until an
+  admin sets one up. "Show once per visitor" is client-side `localStorage`
+  keyed on the image URL — no per-visitor state in the DB.
 - `legal_pages` — `slug` (`'privacy'`/`'terms'`) is the natural key, not a
   singleton — two named rows. `body` uses a tiny, dependency-free
   convention (`## Heading` starts a section, blank lines separate
@@ -195,7 +200,7 @@ is the source of truth.
 
 ## 5. Migrations
 
-Numbered SQL files in `supabase/migrations/` (`0001`…`0021` today), applied
+Numbered SQL files in `supabase/migrations/` (`0001`…`0022` today), applied
 in filename order by `supabase/scripts/run-migrations.ts`:
 
 ```
@@ -251,9 +256,9 @@ column — see `product_images_public_read`/`cart_items_owner_all` in
 
 **Shape (b) — RLS-enabled-with-zero-policies**, for admin-only content
 (`shipping_zones`, `coupons`, `tax_settings`, `homepage_campaign`,
-`homepage_gallery_images`, `legal_pages`, `about_page_content`,
-`rate_limit_hits`, `schema_migrations`, `order_requests` for its write
-path):
+`homepage_gallery_images`, `offer_popup`, `legal_pages`,
+`about_page_content`, `rate_limit_hits`, `schema_migrations`,
+`order_requests` for its write path):
 
 ```sql
 alter table public.shipping_zones enable row level security;
