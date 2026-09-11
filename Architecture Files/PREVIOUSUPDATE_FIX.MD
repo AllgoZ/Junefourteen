@@ -14,6 +14,47 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-09-11 — Fix: "Add new product" had no way to upload the main product photos
+
+**Symptom**: on `/admin/products/new`, there was no product-photo upload
+option anywhere on the page — only the newer Size Chart/Pieces & Pricing
+cards. Reported as the photo uploader having "disappeared."
+
+**Root cause**: `ProductImagesManager` (the add/reorder/delete tool for a
+product's photo gallery) has needed a real, already-saved product id since
+the very first admin CMS commit — its Cloudinary folder (`products/<id>`)
+and the `product_images` foreign key both require one, so `product-form.tsx`
+has always gated it with `{product && <ProductImagesManager .../>}` and it
+never rendered on the create page. Not a regression from the size-chart/
+pieces work — that work just added two new cards to the create form with no
+photo-upload counterpart, making the pre-existing gap far more noticeable.
+
+**Fix, additive only**:
+- `product-form.tsx` gets a new **Product Images** card, shown only when
+  creating (`!product`) — a plain multi-file input, no reorder/delete UI
+  since nothing exists to reorder yet.
+- `saveProductAction`'s create path (`!id`) validates every selected file
+  up front — same discipline as the existing size-chart image check, so a
+  bad file fails the whole save before anything is created — then, right
+  after the new product row is inserted, uploads each file to
+  `products/<new id>` and inserts a `product_images` row per file in the
+  order chosen (sequential awaits, since `addProductImage` derives
+  `sort_order` from the current row count and concurrent inserts would
+  race). The first file becomes the primary photo, exactly like the edit
+  page's manager.
+- The update path, `ProductImagesManager`, and its three actions (upload/
+  delete/reorder) are untouched — audited them while here and found no bug:
+  correct Cloudinary cleanup on delete, correct `sort_order` handling,
+  correct `revalidateTag`/`revalidatePath` on every mutation.
+
+`tsc`/`lint`/`build` clean; `/admin/products/new` and `/admin/products/[id]`
+still build as the expected dynamic (`ƒ`) routes.
+
+Docs: `ARCHITECTURE.md` §17 (corrected the now-stale "images manager is
+edit-only" line).
+
+---
+
 ## 2026-09-06 — Homepage offer popup (image-only, admin-managed)
 
 A clean, minimalistic promotional popup on the homepage: one

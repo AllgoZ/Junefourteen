@@ -217,6 +217,32 @@ export function ProductForm({
           </div>
         </AdminCard>
 
+        {/*
+          Create-only: ProductImagesManager (rendered below, outside this
+          <form>) needs a real product id to attach uploads to — Cloudinary's
+          folder and the product_images foreign key both require one — so it
+          only appears once a product already exists (see the `{product &&
+          ...}` block at the bottom of this component). This card is how a
+          brand-new product gets its first photos in the same "Save" submit
+          that creates it; saveProductAction uploads them right after the
+          product row is inserted. Once saved, this card is gone for good and
+          ProductImagesManager takes over for add/reorder/delete.
+        */}
+        {!product && (
+          <AdminCard
+            title="Product Images"
+            description="First image becomes the storefront's primary photo. Add more, reorder, or replace them from this product's edit page after saving."
+          >
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border p-4">
+              <ImagePlus className="mb-1.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="product-images">Upload images</Label>
+                <input id="product-images" name="images" type="file" accept="image/*" multiple className="text-sm" />
+              </div>
+            </div>
+          </AdminCard>
+        )}
+
         <AdminCard title="Description">
           <div className="flex flex-col gap-4">
             <Field label="Short Description">

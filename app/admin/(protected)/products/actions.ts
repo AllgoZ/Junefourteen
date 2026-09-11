@@ -127,6 +127,23 @@ export async function saveProductAction(
   const sizeChartAltRaw = String(formData.get("sizeChartImageAlt") ?? "").trim();
   sizeChartImageAlt = sizeChartImageUrl ? sizeChartAltRaw || `${name} size chart` : null;
 
+  // Product photos, create-only — ProductImagesManager (the add/reorder/
+  // delete tool on the edit page) needs a real product id to attach to, so a
+  // brand-new product's first photos come in through this same submission
+  // instead. Validate every file up front, before creating anything, so a
+  // bad file fails the whole save exactly like an invalid size-chart image
+  // does above rather than leaving a half-created product behind.
+  const newImageBuffers: Buffer[] = [];
+  if (!id) {
+    const imageFiles = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
+    for (const file of imageFiles) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const validation = validateImageFile(file, buffer);
+      if (!validation.valid) return { error: validation.error };
+      newImageBuffers.push(buffer);
+    }
+  }
+
   const input: ProductFormInput = {
     slug,
     name,
@@ -161,6 +178,19 @@ export async function saveProductAction(
     const productId = id
       ? (await updateProductForAdmin(admin, id, input), id)
       : await createProductForAdmin(admin, input);
+
+    // Sequential, not Promise.all — addProductImage derives sort_order from
+    // the current row count, so concurrent inserts would race and collide.
+    for (const buffer of newImageBuffers) {
+      const uploaded = await uploadImage(buffer, `products/${productId}`);
+      await addProductImage(admin, productId, {
+        imageUrl: uploaded.url,
+        cloudinaryPublicId: uploaded.publicId,
+        alt: "",
+        width: uploaded.width,
+        height: uploaded.height,
+      });
+    }
 
     revalidateTag("products", "max");
     revalidateTag("collections", "max");

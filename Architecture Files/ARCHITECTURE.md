@@ -1481,7 +1481,17 @@ alt + "remove", handled in `saveProductAction` exactly like
 **Pieces & Pricing** card (a repeatable name/price/"default" list serialised
 to a hidden JSON input, reconciled id-preservingly via
 `reconcileProductPieces` — §14 `product_pieces`). Both work at create *and*
-edit time (unlike the images manager, which is edit-only).
+edit time. The images manager (`product-images-manager.tsx`) is still
+edit-only — it needs a real product id to attach uploads to (Cloudinary
+folder + the `product_images` foreign key both require one) — but the create
+form (`/admin/products/new`) carries its own one-off **Product Images** card
+(a plain multi-file input, no reorder/delete since nothing exists yet) so a
+brand-new product can get its first photos in the same submission that
+creates it: `saveProductAction` validates every file before creating
+anything, then uploads them to `products/<new id>` and inserts a
+`product_images` row per file, in order, right after the insert — the first
+becomes the primary photo. That card disappears once the product exists;
+`product-images-manager.tsx` takes over for add/reorder/delete from there.
 `product-images-manager.tsx`'s upload form reports its own `pending` state
 up to `product-form.tsx` via an `onUploadingChange` callback, which
 disables the main "Save Product" button (plus an inline "Image uploading —
