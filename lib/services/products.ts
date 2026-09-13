@@ -142,8 +142,29 @@ export async function getCollectionBySlug(slug: string): Promise<Collection | un
     ["collection-by-slug"],
     { tags: ["collections", `collection:${slug}`], revalidate: 3600 }
   );
-  const collection = await cached(slug);
-  return collection ?? undefined;
+
+  // generateStaticParams fans this call out once per collection, all in
+  // parallel with the rest of `next build`'s static generation — a single
+  // transient Supabase error under that concurrent burst (observed failing
+  // a Vercel build; not reproducible locally) must never take down the
+  // whole deployment. One retry after a short pause absorbs a transient
+  // hiccup; a genuinely broken query still resolves to "not found" (the
+  // same shape both callers already handle via `if (!collection) ...`)
+  // instead of crashing the build. unstable_cache doesn't memoize a thrown
+  // rejection, so the retry is a real second attempt, not a replay.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const collection = await cached(slug);
+      return collection ?? undefined;
+    } catch (err) {
+      if (attempt === 2) {
+        console.error(`getCollectionBySlug(${slug}): giving up after retry —`, err);
+        return undefined;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+  return undefined;
 }
 
 export async function getNewArrivals(limit = 8): Promise<Product[]> {
