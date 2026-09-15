@@ -1,17 +1,21 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Image from "next/image";
-import { ImagePlus, Plus, X } from "lucide-react";
+import { ImagePlus, Loader2, Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { AdminCard } from "@/components/admin/ui/card";
 import cloudinaryLoader from "@/lib/cloudinary/loader";
 import { SIZES } from "@/types/product";
-import { saveProductAction, type ProductFormState } from "@/app/admin/(protected)/products/actions";
+import {
+  saveProductAction,
+  uploadDraftProductImageAction,
+  type ProductFormState,
+} from "@/app/admin/(protected)/products/actions";
 import type { AdminProductDetail } from "@/lib/repositories/admin/products";
 import { ProductImagesManager } from "@/components/admin/product-images-manager";
 
@@ -103,6 +107,149 @@ function PiecesField({ initial }: { initial: PieceRow[] }) {
       >
         <Plus className="size-4" /> Add piece
       </Button>
+    </div>
+  );
+}
+
+interface DraftImage {
+  key: string;
+  status: "uploading" | "done" | "error";
+  imageUrl?: string;
+  cloudinaryPublicId?: string;
+  width?: number;
+  height?: number;
+  error?: string;
+}
+
+/**
+ * Create-only "Product Images" field. Each file uploads to Cloudinary the
+ * moment it's chosen — its own small request per photo, via
+ * uploadDraftProductImageAction called directly (not through a <form>, same
+ * as ProductImagesManager's reorder calls) — instead of bundling every
+ * file's raw bytes into the big "Save Product" submission the way this used
+ * to work. That bundling is what let a handful of full-size camera photos
+ * blow past the Server Action body-size cap and fail the whole save with an
+ * opaque error; uploading per-file up front avoids that entirely, and gives
+ * each photo its own progress/error state instead of an all-or-nothing one.
+ * Already-uploaded results are serialised to a hidden JSON input — the same
+ * convention PiecesField above uses — for saveProductAction to attach once
+ * the product row exists. Mirrors ProductImagesManager's onUploadingChange
+ * contract so the same "Waiting for image upload…" Save-button gate at the
+ * bottom of this form covers create mode too.
+ */
+function NewProductImagesField({ onUploadingChange }: { onUploadingChange: (uploading: boolean) => void }) {
+  const inputId = useId();
+  const [images, setImages] = useState<DraftImage[]>([]);
+
+  useEffect(() => {
+    onUploadingChange(images.some((img) => img.status === "uploading"));
+  }, [images, onUploadingChange]);
+
+  function handleFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    const drafts: DraftImage[] = files.map(() => ({ key: crypto.randomUUID(), status: "uploading" }));
+    setImages((prev) => [...prev, ...drafts]);
+
+    files.forEach((file, i) => {
+      const key = drafts[i].key;
+      uploadDraftProductImageAction(file).then((result) => {
+        setImages((prev) =>
+          prev.map((img) =>
+            img.key !== key
+              ? img
+              : result.error
+                ? { ...img, status: "error", error: result.error }
+                : {
+                    ...img,
+                    status: "done",
+                    imageUrl: result.imageUrl,
+                    cloudinaryPublicId: result.cloudinaryPublicId,
+                    width: result.width,
+                    height: result.height,
+                  }
+          )
+        );
+      });
+    });
+  }
+
+  const serialised = JSON.stringify(
+    images
+      .filter((img) => img.status === "done")
+      .map((img) => ({
+        imageUrl: img.imageUrl,
+        cloudinaryPublicId: img.cloudinaryPublicId,
+        width: img.width,
+        height: img.height,
+      }))
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input type="hidden" name="images" value={serialised} />
+
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {images.map((img, index) => (
+            <div key={img.key} className="relative aspect-[4/5] overflow-hidden rounded-lg border border-border bg-muted">
+              {img.status === "done" && img.imageUrl && (
+                <>
+                  <Image loader={cloudinaryLoader} src={img.imageUrl} alt="" fill sizes="200px" className="object-cover" />
+                  {index === 0 && (
+                    <span className="absolute top-1.5 left-1.5 rounded-full bg-foreground/85 px-2 py-0.5 text-[10px] font-medium text-background">
+                      Primary
+                    </span>
+                  )}
+                </>
+              )}
+              {img.status === "uploading" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-muted-foreground">
+                  <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                  <span className="text-[11px]">Uploading…</span>
+                </div>
+              )}
+              {img.status === "error" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-destructive/10 p-2 text-center">
+                  <span className="text-[11px] text-destructive">{img.error ?? "Upload failed"}</span>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Remove image"
+                onClick={() => setImages((prev) => prev.filter((i) => i.key !== img.key))}
+                className="absolute top-1 right-1 rounded-full bg-background/85 hover:text-destructive"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border p-4">
+        <ImagePlus className="mb-1.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={inputId}>Upload images</Label>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/*"
+            multiple
+            className="text-sm"
+            onChange={(e) => {
+              handleFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </div>
+
+      {images.some((img) => img.status === "uploading") && (
+        <p className="text-xs text-muted-foreground">Uploading — you can keep filling in the rest of the form.</p>
+      )}
     </div>
   );
 }
@@ -223,9 +370,10 @@ export function ProductForm({
           folder and the product_images foreign key both require one — so it
           only appears once a product already exists (see the `{product &&
           ...}` block at the bottom of this component). This card is how a
-          brand-new product gets its first photos in the same "Save" submit
-          that creates it; saveProductAction uploads them right after the
-          product row is inserted. Once saved, this card is gone for good and
+          brand-new product gets its first photos: NewProductImagesField
+          uploads each one to Cloudinary as soon as it's chosen, and
+          saveProductAction attaches them right after the product row is
+          inserted. Once saved, this card is gone for good and
           ProductImagesManager takes over for add/reorder/delete.
         */}
         {!product && (
@@ -233,13 +381,7 @@ export function ProductForm({
             title="Product Images"
             description="First image becomes the storefront's primary photo. Add more, reorder, or replace them from this product's edit page after saving."
           >
-            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border p-4">
-              <ImagePlus className="mb-1.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="product-images">Upload images</Label>
-                <input id="product-images" name="images" type="file" accept="image/*" multiple className="text-sm" />
-              </div>
-            </div>
+            <NewProductImagesField onUploadingChange={setImageUploading} />
           </AdminCard>
         )}
 

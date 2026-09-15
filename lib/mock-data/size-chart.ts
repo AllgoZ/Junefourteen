@@ -23,3 +23,17 @@ export const CM_TO_IN = 0.393701;
 export function cmToIn(valueCm: number): number {
   return Math.round(valueCm * CM_TO_IN * 10) / 10;
 }
+
+/**
+ * Site-wide default size-chart image — shown in the "Size Guide" popup for
+ * any product that hasn't had its own chart uploaded from /admin/products
+ * (lib/mappers/product.ts#dbProductToProduct). A per-product upload still
+ * takes priority; this only fills the gap that used to fall through to the
+ * generic table above. Uploaded once to Cloudinary from the source file at
+ * `Architecture Files/size chart.jpeg`, publicId "default-size-chart" so a
+ * future replacement can just re-upload to the same id.
+ */
+export const DEFAULT_SIZE_CHART_IMAGE = {
+  src: "https://res.cloudinary.com/ykisnph9/image/upload/v1789432385/junefourteen/size-charts/default-size-chart.jpg",
+  alt: "Size chart",
+};

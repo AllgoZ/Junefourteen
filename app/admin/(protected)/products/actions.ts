@@ -50,6 +50,43 @@ function splitCommas(value: string): string[] {
 }
 
 /**
+ * Metadata for one photo the create-form's NewProductImagesField already
+ * uploaded to Cloudinary (via uploadDraftProductImageAction) before the
+ * "Save Product" submit. Parsed from the same kind of hidden-JSON-input the
+ * "Pieces" list below uses. Defensive for the same reason: a malformed
+ * value just yields an empty list rather than throwing.
+ */
+interface DraftImageInput {
+  imageUrl: string;
+  cloudinaryPublicId: string;
+  width: number;
+  height: number;
+}
+
+function parseDraftImages(raw: string): DraftImageInput[] {
+  if (!raw.trim()) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const images: DraftImageInput[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const imageUrl = String(e.imageUrl ?? "").trim();
+    const cloudinaryPublicId = String(e.cloudinaryPublicId ?? "").trim();
+    const width = Number(e.width);
+    const height = Number(e.height);
+    if (!imageUrl || !cloudinaryPublicId || !Number.isFinite(width) || !Number.isFinite(height)) continue;
+    images.push({ imageUrl, cloudinaryPublicId, width, height });
+  }
+  return images;
+}
+
+/**
  * The product form serialises its repeatable "Pieces" list to a hidden JSON
  * input. Parse defensively — a malformed value just yields an empty list
  * (product stays single-price) rather than throwing.
@@ -130,19 +167,14 @@ export async function saveProductAction(
   // Product photos, create-only — ProductImagesManager (the add/reorder/
   // delete tool on the edit page) needs a real product id to attach to, so a
   // brand-new product's first photos come in through this same submission
-  // instead. Validate every file up front, before creating anything, so a
-  // bad file fails the whole save exactly like an invalid size-chart image
-  // does above rather than leaving a half-created product behind.
-  const newImageBuffers: Buffer[] = [];
-  if (!id) {
-    const imageFiles = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
-    for (const file of imageFiles) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const validation = validateImageFile(file, buffer);
-      if (!validation.valid) return { error: validation.error };
-      newImageBuffers.push(buffer);
-    }
-  }
+  // instead. NewProductImagesField already uploaded each file to Cloudinary
+  // the moment it was chosen (its own small request per file, each well
+  // under the Server Action body-size cap) and serialised the results here
+  // as JSON — this submission only carries that small metadata, never raw
+  // image bytes, so a handful of full-size camera photos can no longer
+  // blow past the combined 10mb request limit the way bundling them into
+  // this same submission used to (the intermittent "page shows error").
+  const newImages = id ? [] : parseDraftImages(String(formData.get("images") ?? ""));
 
   const input: ProductFormInput = {
     slug,
@@ -181,14 +213,15 @@ export async function saveProductAction(
 
     // Sequential, not Promise.all — addProductImage derives sort_order from
     // the current row count, so concurrent inserts would race and collide.
-    for (const buffer of newImageBuffers) {
-      const uploaded = await uploadImage(buffer, `products/${productId}`);
+    // Already uploaded to Cloudinary (see the comment above); this just
+    // attaches the rows.
+    for (const img of newImages) {
       await addProductImage(admin, productId, {
-        imageUrl: uploaded.url,
-        cloudinaryPublicId: uploaded.publicId,
+        imageUrl: img.imageUrl,
+        cloudinaryPublicId: img.cloudinaryPublicId,
         alt: "",
-        width: uploaded.width,
-        height: uploaded.height,
+        width: img.width,
+        height: img.height,
       });
     }
 
@@ -281,6 +314,50 @@ export async function bulkDeleteProductsAction(ids: string[]): Promise<BulkDelet
   revalidatePath("/admin/products");
 
   return { deletedCount: deletableIds.length, deactivatedInstead };
+}
+
+export interface DraftImageUploadResult {
+  error?: string;
+  imageUrl?: string;
+  cloudinaryPublicId?: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Called directly from NewProductImagesField (not via a <form>/
+ * useActionState, same as reorderProductImagesAction below) once per file,
+ * the moment it's chosen on the "Add new product" page — before there's a
+ * real product id to attach a product_images row to. Uploads to Cloudinary
+ * only; the resulting metadata travels back to the client, which serialises
+ * it into a hidden field for the main form to attach via addProductImage
+ * once saveProductAction has created the product row. Keeping each photo's
+ * upload its own small request (instead of bundling every file's bytes into
+ * the big "Save Product" submission) is what keeps a handful of full-size
+ * camera photos from blowing past the Server Action body-size cap.
+ */
+export async function uploadDraftProductImageAction(file: File): Promise<DraftImageUploadResult> {
+  await requireAdmin();
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose an image file to upload." };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const validation = validateImageFile(file, buffer);
+  if (!validation.valid) return { error: validation.error };
+
+  try {
+    const uploaded = await uploadImage(buffer, "products/new");
+    return {
+      imageUrl: uploaded.url,
+      cloudinaryPublicId: uploaded.publicId,
+      width: uploaded.width,
+      height: uploaded.height,
+    };
+  } catch {
+    return { error: "Upload failed. Please try again." };
+  }
 }
 
 export interface ImageUploadState {

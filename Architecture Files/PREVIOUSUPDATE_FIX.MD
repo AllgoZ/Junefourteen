@@ -14,6 +14,62 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-09-15 — Default size chart image + fix intermittent "Add new product" photo-upload error
+
+Three related admin fixes/additions, all scoped to the product form.
+
+**Default size chart** — every product without its own uploaded size-chart
+image used to fall back to the generic measurement table in the PDP's
+"Size Guide" popup. It now falls back to a shared default chart image
+instead (a per-product upload still takes priority, unchanged).
+`Architecture Files/size chart.jpeg` (user-supplied) uploaded once to
+Cloudinary at a fixed public id (`size-charts/default-size-chart`, so a
+future replacement is just a re-upload to the same id); the resulting URL
+is a new `DEFAULT_SIZE_CHART_IMAGE` constant in `lib/mock-data/size-chart.ts`,
+wired into the one fallback branch in
+`lib/mappers/product.ts#dbProductToProduct`. The generic table component
+(`SizeGuideContent`) is untouched, just no longer reached through this path.
+
+**Root-caused the intermittent "page shows error" on Add New Product**:
+the create form's "Product Images" card (added in the previous entry below)
+bundled every selected file's raw bytes into the same `saveProductAction`
+submission as the rest of the form. A single photo is fine, but a handful
+of full-size camera photos together could push that one request past the
+10MB Server Action body cap (`next.config.ts`) — even though each file was
+comfortably under the per-file 8MB limit already enforced in
+`validate-image.ts` — and the whole save would fail with an opaque,
+intermittent error that depended entirely on how many/how large the photos
+happened to be.
+
+**Fix**: `components/admin/product-form.tsx`'s create-only image field
+(`NewProductImagesField`) now uploads each file to Cloudinary the instant
+it's chosen — its own small request per photo (`uploadDraftProductImageAction`,
+a new Server Action called directly, the same way `reorderProductImagesAction`
+already is, not through a `<form>`) — and only the resulting small JSON
+metadata (`{imageUrl, cloudinaryPublicId, width, height}`) travels with the
+main "Save Product" submission, the same hidden-JSON-input convention
+`PiecesField` already uses. No raw image bytes ever reach the big
+submission anymore, so the body-size failure mode is gone.
+
+This also gives the create page the same **visual cue + Save-button gate**
+the edit page's image manager already had: each photo gets its own
+thumbnail with a spinner while uploading (or an inline error if that one
+file fails, instead of the whole form failing), and the field reports its
+"any upload still in flight" state up through the same `onUploadingChange`
+callback `product-images-manager.tsx` already used — disabling "Save
+Product" and showing "Waiting for image upload…" until every photo is
+done, on create as well as edit.
+
+Verified: `tsc`/`lint`/`build` clean; a clean `next build` still prerenders
+`/product/[slug]`'s known paths; a local prod server confirms the default
+chart URL appears for a product with no chart of its own
+(`emerald-grace`) while a product with its own chart still serves that one
+(`kanakavalli-wine-raw-silk`).
+
+Docs: `ARCHITECTURE.md` §14 (products table), §17 (admin product form).
+
+---
+
 ## 2026-09-11 — Fix: "Add new product" had no way to upload the main product photos
 
 **Symptom**: on `/admin/products/new`, there was no product-photo upload

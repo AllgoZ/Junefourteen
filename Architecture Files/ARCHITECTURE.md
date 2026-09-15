@@ -1101,7 +1101,7 @@ and `everyday-edit`), which a single FK can't represent.
 |---|---|
 | `profiles` | `id` = `auth.users.id`. `role` (`customer`/`admin`), `email` (denormalized copy of `auth.users.email`, added in `0005` so the admin customers list is one query — §17). Auto-created by the `handle_new_user()` trigger on signup. |
 | `collections` | Matches the `Collection` type exactly, including `tone` (placeholder gradient seed) which the brief's own suggested schema omitted. |
-| `products` | Matches `Product`. `category`/`tags`/`wash_care` stay flat text/`text[]` columns (no separate lookup tables) — matches how the domain type already treats them. `0008` adds `stock_quantity`/`low_stock_threshold` (both `integer not null check (>= 0)`) — deliberately independent of `is_sold_out`, which stays the sole storefront purchase-gating flag; stock is admin-visible inventory tracking only (§17), not wired to auto-disable purchasing. `0020` adds `size_chart_image_url`/`size_chart_cloudinary_public_id`/`size_chart_image_alt` (all nullable) — an optional per-product size-chart image, same single-image shape as `collections.image_url`; when set, the PDP's "Size Guide" popup shows just that image instead of the generic table (§17). |
+| `products` | Matches `Product`. `category`/`tags`/`wash_care` stay flat text/`text[]` columns (no separate lookup tables) — matches how the domain type already treats them. `0008` adds `stock_quantity`/`low_stock_threshold` (both `integer not null check (>= 0)`) — deliberately independent of `is_sold_out`, which stays the sole storefront purchase-gating flag; stock is admin-visible inventory tracking only (§17), not wired to auto-disable purchasing. `0020` adds `size_chart_image_url`/`size_chart_cloudinary_public_id`/`size_chart_image_alt` (all nullable) — an optional per-product size-chart image, same single-image shape as `collections.image_url`; when set, the PDP's "Size Guide" popup shows just that image instead of the generic table (§17). A product with no chart of its own no longer falls all the way through to that generic table either — `lib/mappers/product.ts#dbProductToProduct` falls back to a site-wide `DEFAULT_SIZE_CHART_IMAGE` constant (`lib/mock-data/size-chart.ts`), a Cloudinary asset uploaded once from `Architecture Files/size chart.jpeg` at a fixed public id (`default-size-chart`, so a future replacement is just a re-upload to the same id). The generic table (`SizeGuideContent`/`sizeChartCm`) is untouched and still exists, just no longer reachable through this path now that `sizeChartImage` is effectively always set. |
 | `product_collections`, `product_images`, `product_sizes`, `product_sleeve_options` | Children of `products`, `on delete cascade`. |
 | `product_pieces` | `0021` — per-piece product pricing (a kurta set sold as Top / Bottom / Dupatta). Plain child table like `product_sizes`: `name`, `price`, `default_selected` (ticked when the PDP first loads), `sort_order`, `is_active`. A product with zero rows here behaves exactly as before (one `products.price`); with rows, the customer ticks a subset (≥1) and the charged price is the **server-computed sum** of the ticked pieces — never the client's line price (§16). Public-read RLS gated on the parent product being active, same as `product_images`; admin writes via the service-role client, id-preserving reconcile (`reconcileProductPieces`) so `cart_items.selected_piece_ids` stays valid across a product save. |
 | `banners` | Homepage hero carousel slides (`0006`, reshaped by `0009` and `0010`). Each row is one slide with **two independent images** — `desktop_image_url`/`desktop_image_alt`/`desktop_cloudinary_public_id`/`desktop_object_position` (the required horizontal/laptop photo) and `mobile_image_url`/`mobile_image_alt`/`mobile_cloudinary_public_id`/`mobile_object_position` (an optional, genuinely different vertical/mobile photo — not just a different crop of the desktop one; falls back to the desktop image + `mobile_object_position` when absent). Both `object_position` columns are CSS `object-position` strings (e.g. `"50% 35%"`); a manually pasted image URL (vs. a Cloudinary upload) leaves the matching `cloudinary_public_id` null. `0010` added optional overlay copy — `badge_text`, `headline` (required in the admin UI, stored `not null default ''`), `subheading`, `primary_cta_text`/`primary_cta_href` (renamed from `link_label`/`link_href`), `secondary_cta_text`/`secondary_cta_href`, `offer_badge_text` — all opt-in on the storefront (§17). Also `tone` (placeholder-gradient seed, same convention as `collections.tone`)/`sort_order`/`is_active` — multiple active rows is how the carousel gets more than one slide. Public-read policy on `is_active = true` rows, same shape as `collections`. Unlike every other admin-managed table, banners get a genuine hard delete (§17) since nothing else references a banner row. |
@@ -1484,20 +1484,33 @@ to a hidden JSON input, reconciled id-preservingly via
 edit time. The images manager (`product-images-manager.tsx`) is still
 edit-only — it needs a real product id to attach uploads to (Cloudinary
 folder + the `product_images` foreign key both require one) — but the create
-form (`/admin/products/new`) carries its own one-off **Product Images** card
-(a plain multi-file input, no reorder/delete since nothing exists yet) so a
-brand-new product can get its first photos in the same submission that
-creates it: `saveProductAction` validates every file before creating
-anything, then uploads them to `products/<new id>` and inserts a
-`product_images` row per file, in order, right after the insert — the first
-becomes the primary photo. That card disappears once the product exists;
-`product-images-manager.tsx` takes over for add/reorder/delete from there.
-`product-images-manager.tsx`'s upload form reports its own `pending` state
-up to `product-form.tsx` via an `onUploadingChange` callback, which
-disables the main "Save Product" button (plus an inline "Image uploading —
-please wait" note) for the duration — the images manager is a sibling
-`<form>`, not nested (§17 note above about why), so without this the main
-form had no way to know an upload was in flight. Every entity form in this
+form (`/admin/products/new`) carries its own one-off **Product Images** card,
+`NewProductImagesField` (defined inline in `product-form.tsx`, same as
+`PiecesField`), so a brand-new product can get its first photos in the same
+submission that creates it. Each file uploads to Cloudinary (folder
+`products/new`) the moment it's chosen — its own small request per photo via
+`uploadDraftProductImageAction`, called directly the way
+`reorderProductImagesAction` already is, not through a `<form>` — and the
+resulting `{imageUrl, cloudinaryPublicId, width, height}` list is serialised
+to a hidden JSON input (the same convention `PiecesField` uses) for
+`saveProductAction` to attach via `addProductImage` right after the product
+row is inserted; the first becomes the primary photo. This replaced an
+earlier version that bundled every file's raw bytes into the "Save Product"
+submission itself — fine for one photo, but a handful of full-size camera
+photos together could exceed the 10MB Server-Action body cap and fail the
+whole save with an opaque error even though each file was well under the
+per-file 8MB limit (`validate-image.ts`). Uploading per-file up front, before
+Save is even clicked, also gives each photo its own thumbnail with a
+spinner/error state instead of one all-or-nothing submission. That card
+disappears once the product exists; `product-images-manager.tsx` takes over
+for add/reorder/delete from there.
+Both this field and `product-images-manager.tsx`'s upload form report their
+own uploading state up to `product-form.tsx` via the same
+`onUploadingChange` callback, which disables the main "Save Product" button
+(plus an inline "Image uploading — please wait" note) for the duration —
+the images manager is a sibling `<form>`, not nested (§17 note above about
+why), so without this the main form had no way to know an upload was in
+flight. Every entity form in this
 admin (`product-form.tsx`, `collection-form.tsx`, `banner-form.tsx`,
 `shipping-zone-form.tsx`, `coupon-form.tsx`) fires a `sonner` success toast
 and navigates back to that entity's **list** page on a successful save —

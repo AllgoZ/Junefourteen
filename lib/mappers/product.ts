@@ -1,5 +1,6 @@
 import type { ProductRow } from "@/lib/repositories/products";
 import type { Product, Size, SleeveOption } from "@/types/product";
+import { DEFAULT_SIZE_CHART_IMAGE } from "@/lib/mock-data/size-chart";
 
 function bySortOrder<T extends { sort_order: number }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.sort_order - b.sort_order);
@@ -40,7 +41,7 @@ export function dbProductToProduct(row: ProductRow): Product {
     })(),
     sizeChartImage: row.size_chart_image_url
       ? { src: row.size_chart_image_url, alt: row.size_chart_image_alt ?? "" }
-      : undefined,
+      : DEFAULT_SIZE_CHART_IMAGE,
     supportsCustomSize: row.custom_size_enabled,
     fabric: row.fabric,
     washCare: row.wash_care,
