@@ -60,6 +60,8 @@ export interface Product {
   isNew?: boolean;
   isBestSeller?: boolean;
   isSoldOut?: boolean;
+  /** Admin-tracked inventory count — drives the storefront's low-stock message and the 0-stock purchase gate. Undefined only for the historical mock catalog (lib/mock-data), never for a real DB-backed product. */
+  stockQuantity?: number;
   sizes: Size[];
   sleeveOptions?: SleeveOption[];
   supportsCustomSize?: boolean;

@@ -94,6 +94,15 @@ export function AddToBagPanel({
   const pieces = product.pieces ?? [];
   const hasPieces = pieces.length > 0;
 
+  // Independent of the admin's manual isSoldOut flag (unchanged, still the
+  // only thing that swaps in the Request to Order flow below) — this is
+  // the numeric stock_quantity reaching 0. undefined only for the
+  // historical mock catalog, never for a real product, so the `=== 0`
+  // check alone (not `<= 0`) is deliberately the only thing that gates here.
+  const isOutOfStock = !product.isSoldOut && product.stockQuantity === 0;
+  const isLowStock =
+    !product.isSoldOut && !isOutOfStock && product.stockQuantity !== undefined && product.stockQuantity < 10;
+
   /** Selected pieces in the product's own sort order. */
   const selectedPieces = pieces.filter((p) => pieceIds.has(p.id));
   const displayPrice = hasPieces
@@ -148,7 +157,7 @@ export function AddToBagPanel({
   }
 
   function handleAddToBag() {
-    if (product.isSoldOut || !validate()) return;
+    if (product.isSoldOut || isOutOfStock || !validate()) return;
     addItem(buildLine(), quantity);
     setQuantity(1);
     if (getIsAuthed()) {
@@ -167,7 +176,7 @@ export function AddToBagPanel({
   }
 
   function handleBuyNow() {
-    if (product.isSoldOut || !validate()) return;
+    if (product.isSoldOut || isOutOfStock || !validate()) return;
     addItem(buildLine(), quantity);
     if (getIsAuthed()) {
       router.push("/checkout");
@@ -185,10 +194,20 @@ export function AddToBagPanel({
           <Price price={displayPrice} compareAtPrice={displayCompareAtPrice} size="lg" />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{product.shortDescription}</p>
-        {product.isSoldOut && (
+        {product.isSoldOut ? (
           <p className="mt-3 text-xs font-medium tracking-[0.12em] text-foreground uppercase">
             Sold Out
           </p>
+        ) : isOutOfStock ? (
+          <p className="mt-3 text-xs font-medium tracking-[0.12em] text-destructive uppercase">
+            Out of Stock
+          </p>
+        ) : (
+          isLowStock && (
+            <p className="mt-3 text-sm font-medium text-destructive">
+              Only {product.stockQuantity} left in stock — order soon
+            </p>
+          )
         )}
       </div>
 
@@ -267,8 +286,8 @@ export function AddToBagPanel({
           </Button>
         ) : (
           <div className="flex gap-3">
-            <Button size="lg" onClick={handleAddToBag} className={cn("flex-1", PRIMARY_CTA)}>
-              Add to Bag
+            <Button size="lg" onClick={handleAddToBag} disabled={isOutOfStock} className={cn("flex-1", PRIMARY_CTA)}>
+              {isOutOfStock ? "Out of Stock" : "Add to Bag"}
             </Button>
             <WishlistButton
               variant="detail"
@@ -285,7 +304,7 @@ export function AddToBagPanel({
             />
           </div>
         )}
-        {!product.isSoldOut && (
+        {!product.isSoldOut && !isOutOfStock && (
           <Button
             size="lg"
             variant="outline"
@@ -298,7 +317,7 @@ export function AddToBagPanel({
       </div>
 
       <AnimatePresence>
-        {!product.isSoldOut && showStickyBar && (
+        {!product.isSoldOut && !isOutOfStock && showStickyBar && (
           <motion.div
             initial={{ y: "100%", opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

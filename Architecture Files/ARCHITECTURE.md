@@ -1101,7 +1101,7 @@ and `everyday-edit`), which a single FK can't represent.
 |---|---|
 | `profiles` | `id` = `auth.users.id`. `role` (`customer`/`admin`), `email` (denormalized copy of `auth.users.email`, added in `0005` so the admin customers list is one query — §17). Auto-created by the `handle_new_user()` trigger on signup. |
 | `collections` | Matches the `Collection` type exactly, including `tone` (placeholder gradient seed) which the brief's own suggested schema omitted. |
-| `products` | Matches `Product`. `category`/`tags`/`wash_care` stay flat text/`text[]` columns (no separate lookup tables) — matches how the domain type already treats them. `0008` adds `stock_quantity`/`low_stock_threshold` (both `integer not null check (>= 0)`) — deliberately independent of `is_sold_out`, which stays the sole storefront purchase-gating flag; stock is admin-visible inventory tracking only (§17), not wired to auto-disable purchasing. `0020` adds `size_chart_image_url`/`size_chart_cloudinary_public_id`/`size_chart_image_alt` (all nullable) — an optional per-product size-chart image, same single-image shape as `collections.image_url`; when set, the PDP's "Size Guide" popup shows just that image instead of the generic table (§17). A product with no chart of its own no longer falls all the way through to that generic table either — `lib/mappers/product.ts#dbProductToProduct` falls back to a site-wide `DEFAULT_SIZE_CHART_IMAGE` constant (`lib/mock-data/size-chart.ts`), a Cloudinary asset uploaded once from `Architecture Files/size chart.jpeg` at a fixed public id (`default-size-chart`, so a future replacement is just a re-upload to the same id). The generic table (`SizeGuideContent`/`sizeChartCm`) is untouched and still exists, just no longer reachable through this path now that `sizeChartImage` is effectively always set. |
+| `products` | Matches `Product`. `category`/`tags`/`wash_care` stay flat text/`text[]` columns (no separate lookup tables) — matches how the domain type already treats them. `0008` adds `stock_quantity`/`low_stock_threshold` (both `integer not null check (>= 0)`). Originally admin-visible inventory tracking only, independent of `is_sold_out` — §26 changed that: the storefront now reads `stock_quantity` too (`PRODUCT_SELECT` in `lib/repositories/products.ts`), and `stock_quantity === 0` is a second, independent purchase gate alongside the still-unchanged `is_sold_out` flag (§26 explains why they're deliberately kept separate rather than merged). `low_stock_threshold` itself stays admin-only — it still only drives the *admin* inventory dashboard's "Low Stock" badge (§17); the storefront's own low-stock message (§26) uses a separate, fixed threshold, not this field. `0020` adds `size_chart_image_url`/`size_chart_cloudinary_public_id`/`size_chart_image_alt` (all nullable) — an optional per-product size-chart image, same single-image shape as `collections.image_url`; when set, the PDP's "Size Guide" popup shows just that image instead of the generic table (§17). A product with no chart of its own no longer falls all the way through to that generic table either — `lib/mappers/product.ts#dbProductToProduct` falls back to a site-wide `DEFAULT_SIZE_CHART_IMAGE` constant (`lib/mock-data/size-chart.ts`), a Cloudinary asset uploaded once from `Architecture Files/size chart.jpeg` at a fixed public id (`default-size-chart`, so a future replacement is just a re-upload to the same id). The generic table (`SizeGuideContent`/`sizeChartCm`) is untouched and still exists, just no longer reachable through this path now that `sizeChartImage` is effectively always set. |
 | `product_collections`, `product_images`, `product_sizes`, `product_sleeve_options` | Children of `products`, `on delete cascade`. |
 | `product_pieces` | `0021` — per-piece product pricing (a kurta set sold as Top / Bottom / Dupatta). Plain child table like `product_sizes`: `name`, `price`, `default_selected` (ticked when the PDP first loads), `sort_order`, `is_active`. A product with zero rows here behaves exactly as before (one `products.price`); with rows, the customer ticks a subset (≥1) and the charged price is the **server-computed sum** of the ticked pieces — never the client's line price (§16). Public-read RLS gated on the parent product being active, same as `product_images`; admin writes via the service-role client, id-preserving reconcile (`reconcileProductPieces`) so `cart_items.selected_piece_ids` stays valid across a product save. |
 | `banners` | Homepage hero carousel slides (`0006`, reshaped by `0009` and `0010`). Each row is one slide with **two independent images** — `desktop_image_url`/`desktop_image_alt`/`desktop_cloudinary_public_id`/`desktop_object_position` (the required horizontal/laptop photo) and `mobile_image_url`/`mobile_image_alt`/`mobile_cloudinary_public_id`/`mobile_object_position` (an optional, genuinely different vertical/mobile photo — not just a different crop of the desktop one; falls back to the desktop image + `mobile_object_position` when absent). Both `object_position` columns are CSS `object-position` strings (e.g. `"50% 35%"`); a manually pasted image URL (vs. a Cloudinary upload) leaves the matching `cloudinary_public_id` null. `0010` added optional overlay copy — `badge_text`, `headline` (required in the admin UI, stored `not null default ''`), `subheading`, `primary_cta_text`/`primary_cta_href` (renamed from `link_label`/`link_href`), `secondary_cta_text`/`secondary_cta_href`, `offer_badge_text` — all opt-in on the storefront (§17). Also `tone` (placeholder-gradient seed, same convention as `collections.tone`)/`sort_order`/`is_active` — multiple active rows is how the carousel gets more than one slide. Public-read policy on `is_active = true` rows, same shape as `collections`. Unlike every other admin-managed table, banners get a genuine hard delete (§17) since nothing else references a banner row. |
@@ -2366,3 +2366,91 @@ local prod server — mobile popup opens top-anchored (not centered) on a
 drawer settle on the right number instantly with no flicker across the
 debounce window; a full-page screenshot of `/checkout` confirms the polish
 renders cleanly with no layout breakage.
+
+## 26. Stock-aware PDP, toast polish, and a stale-checkout-total fix
+
+Direct follow-up to §25's buy-flow pass, same journey, three more
+asks — low-stock urgency messaging, restricting purchase at 0 stock, a
+better-looking "View Bag" toast action, and a real display bug in the
+checkout total. Files touched: `lib/repositories/products.ts`,
+`types/product.ts`, `lib/mappers/product.ts` (wiring `stock_quantity` to
+the storefront for the first time), `add-to-bag-panel.tsx`,
+`components/ui/sonner.tsx`, `checkout-content.tsx`.
+
+- **`stock_quantity` reaches the storefront for the first time.** It was
+  admin-only before this (§14) — `PRODUCT_SELECT`
+  (`lib/repositories/products.ts`) now selects it, `Product` gains an
+  optional `stockQuantity` (`types/product.ts` — optional specifically so
+  the historical `lib/mock-data/products.ts` catalog, which predates this
+  field, doesn't need touching; every real DB-backed product always has a
+  real number), and `dbProductToProduct` maps it straight through.
+- **Low-stock urgency message** (`add-to-bag-panel.tsx`) — `0 <
+  stockQuantity < 10` shows "Only N left in stock — order soon" in
+  `text-destructive` (the site's existing red token, `oklch(0.55 0.16
+  25)`) under the description. Deliberately **not** the admin's own
+  configurable `low_stock_threshold` — that field's only job stays driving
+  the *admin* inventory dashboard's "Low Stock" badge (§17); conflating
+  the two would silently change what that admin setting means. This one
+  uses a fixed threshold of 10, a separate customer-facing concept for a
+  separate audience.
+- **0-stock purchase gate** — `stockQuantity === 0` disables Add to
+  Bag/Buy Now (the inline button reads "Out of Stock", Buy Now and the
+  mobile sticky bar are hidden entirely rather than shown disabled),
+  independent of and *in addition to* the existing `is_sold_out` flag.
+  Deliberately **not** merged into the existing Sold Out → Request to
+  Order flow — that flow stays tied only to the admin's explicit,
+  intentional `is_sold_out` flag; `stock_quantity` hitting 0 is often just
+  incidental depletion the admin hasn't necessarily decided to treat as
+  "switch to pre-order" yet. The size/sleeve/quantity selection UI still
+  shows normally either way — only the purchase action itself is gated.
+- **Toast action-button styling** (`components/ui/sonner.tsx`) — the
+  "Added to your bag"/"View Bag" toast (and the wishlist "moved to your
+  bag" one, same mechanism, both fixed by this one shared change) sits at
+  `bottom-center` (`app/(site)/layout.tsx`'s `<Toaster>`), squarely in a
+  mobile thumb zone, with an action button `sonner` ships completely
+  unstyled by default. `toastOptions.classNames.actionButton` now matches
+  the site's own black-pill `Button` "default" variant (`bg-primary`/
+  `text-primary-foreground`, `rounded-full`) instead of sonner's bare
+  default — verified via the wishlist move-to-bag flow (the one path that
+  fires this toast unconditionally, auth or not, useful for testing it
+  without a real session): computed styles confirm `#0a0a0a` background,
+  white text, fully rounded.
+- **Stale checkout total, root-caused** — `checkout-content.tsx`'s line
+  items/subtotal were always correctly reactive; `delivery.amount` and a
+  coupon's `discountAmount` are both one-time snapshots computed against
+  whatever `subtotal` was *when fetched/applied*, and neither was
+  invalidated when the cart's contents (and so its subtotal) changed
+  afterward — e.g. removing an item from the cart drawer while sitting on
+  checkout. The existing estimate effect had `subtotal` in its dependency
+  array but bailed immediately because its own `delivery` guard was still
+  truthy from before; only an *address* change actually nulled `delivery`.
+  A purely display bug, not a pricing one — `createOrderAction` always
+  re-validates/recomputes everything server-side at order time regardless
+  (§16) — but a real, reproducible one. Fix, two parts:
+  1. A new effect, keyed on `subtotal`, nulls `delivery`/`deliveryError`
+     and clears `appliedCoupon`/`couponError` (with a toast explaining why)
+     whenever the cart's subtotal changes while on this page — same
+     "reset on change" shape `update()`/`applySavedAddress()` already use
+     for address edits, just triggered by cart changes instead.
+  2. That reset happens in a *separate* effect/render pass (deferred to a
+     microtask, same `react-hooks/set-state-in-effect` reason as the
+     existing delivery effect), so the existing delivery-estimate effect
+     needed `delivery` added to its own dependency array to actually
+     notice the reset and re-fire — its dependency list previously only
+     covered the address/subtotal change that triggers a fetch, not a
+     `delivery` change on its own, which is exactly what nulling it from a
+     different effect produces. Missing this is what made the first,
+     naive version of part 1 alone still show a frozen "Enter your state
+     and PIN code…" prompt that never actually re-estimated.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium against a
+local prod server for all four — a 0-stock product (`venmugil-yellow`)
+shows "Out of Stock" with both buttons gated, a 4-left product
+(`venmugil-grey`) shows the red low-stock line while Add to Bag stays
+enabled, a 20-in-stock control product shows neither; the wishlist
+move-to-bag toast's action button computed styles confirm the new
+black-pill treatment; a two-item guest checkout with a live shipping
+estimate (₹120, Karnataka/560001), after removing one item via the cart
+drawer, re-estimates fresh (still ₹120 against the smaller remaining
+order here) and the grand Total updates to match — not left showing the
+old two-item amount.

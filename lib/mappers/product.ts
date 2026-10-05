@@ -29,6 +29,7 @@ export function dbProductToProduct(row: ProductRow): Product {
     isNew: row.is_new,
     isBestSeller: row.is_best_seller,
     isSoldOut: row.is_sold_out,
+    stockQuantity: row.stock_quantity,
     sizes: bySortOrder(row.product_sizes).map((s) => s.size as Size),
     sleeveOptions: row.product_sleeve_options.length
       ? bySortOrder(row.product_sleeve_options).map((s) => s.sleeve_option as SleeveOption)

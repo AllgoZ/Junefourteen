@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { CreditCard, Truck, Tag, X } from "lucide-react";
@@ -160,10 +160,14 @@ export function CheckoutContent({
   // Fetches delivery options automatically as soon as the address is
   // complete enough to estimate — previously this required an explicit
   // "Check Delivery Options" click even after a valid state + PIN were
-  // entered. `update()`/`applySavedAddress()` already reset `delivery` to
-  // null on any address change, so this effect naturally re-fires and
-  // re-estimates whenever the address changes again, without needing its
-  // own reset logic.
+  // entered. `update()`/`applySavedAddress()` reset `delivery` to null on
+  // any address change, and the cart-change effect below does the same
+  // when the bag's contents change — this effect just needs to notice
+  // `delivery` going back to null and re-fire, which is why `delivery` is
+  // in its own dependency array below: the cart-change effect nulls it
+  // from a separate deferred microtask (its own render pass), so this
+  // effect can't rely on form.state/form.pin/subtotal alone to notice —
+  // none of those change a second time just because `delivery` did.
   useEffect(() => {
     if (!canEstimateDelivery || delivery || estimating || deliveryError) return;
     // Deferred to a microtask rather than calling estimateDelivery()
@@ -174,8 +178,40 @@ export function CheckoutContent({
     // later, which satisfies the rule without changing when the user
     // actually sees the "Checking…" state (still before paint).
     Promise.resolve().then(() => estimateDelivery());
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-runs only on the address/subtotal changes above; estimateDelivery is stable enough here (defined fresh each render but only reads current form/subtotal via closure, same values already listed) and adding it would re-fire on every render.
-  }, [canEstimateDelivery, form.state, form.pin, subtotal]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-runs only on the address/subtotal/delivery changes above; estimateDelivery/estimating/deliveryError are stable enough here (defined/read fresh each render via closure, same values already listed or guarded above) and adding the rest would re-fire on every render. `delivery` *is* listed (see below) even though this effect never sets it to a value its own guard wouldn't then block on.
+  }, [canEstimateDelivery, form.state, form.pin, subtotal, delivery]);
+
+  // The line items above the grand Total are always correct — items/
+  // subtotal come straight from useCart() and re-render instantly on any
+  // add/remove. What wasn't correct: delivery.amount and a coupon's
+  // discountAmount are both snapshots computed against whatever subtotal
+  // was current *when they were fetched/applied* (above, and in
+  // applyCoupon below) — neither was invalidated when the cart's contents
+  // (and so its subtotal) changed afterward, e.g. removing an item from the
+  // cart drawer while sitting on this page. The effect above only resets
+  // `delivery` on an *address* change, never a cart change, even though
+  // `subtotal` was already (silently) in its dependency array. Result: the
+  // grand Total could keep folding in a shipping fee/discount computed
+  // against a bag that no longer exists. This is purely a display bug —
+  // createOrderAction always re-validates/recomputes everything server-side
+  // at order time (§16), so nothing here was ever at risk of overcharging.
+  const prevSubtotalRef = useRef(subtotal);
+  useEffect(() => {
+    if (prevSubtotalRef.current === subtotal) return;
+    prevSubtotalRef.current = subtotal;
+    // Deferred to a microtask for the same react-hooks/set-state-in-effect
+    // reason as the delivery-estimate effect above.
+    Promise.resolve().then(() => {
+      setDelivery(null);
+      setDeliveryError(false);
+      if (appliedCoupon) {
+        setAppliedCoupon(null);
+        setCouponError(null);
+        toast.info("Your bag changed, so your coupon was removed — please reapply it.");
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- appliedCoupon is read via closure inside the deferred callback (current value at the time the subtotal change is observed), not meant to re-trigger this effect on its own — only a real subtotal change should.
+  }, [subtotal]);
 
   const applyCoupon = async () => {
     if (!couponInput.trim()) return;

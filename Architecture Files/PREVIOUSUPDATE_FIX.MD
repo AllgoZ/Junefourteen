@@ -14,6 +14,61 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-10-05 — Stock-aware PDP, toast polish, stale-checkout-total fix
+
+Direct follow-up to the buy-flow pass below: low-stock urgency messaging,
+restricting purchase at 0 stock, a better-looking "View Bag" toast, and a
+real display bug in the checkout total. Six files: `lib/repositories/
+products.ts`, `types/product.ts`, `lib/mappers/product.ts` (wiring
+`stock_quantity` to the storefront for the first time — it was admin-only
+before), `add-to-bag-panel.tsx`, `components/ui/sonner.tsx`,
+`checkout-content.tsx`.
+
+1. **Low-stock message**: `0 < stockQuantity < 10` shows "Only N left in
+   stock — order soon" in the site's existing `text-destructive` red
+   token on the PDP. Uses a fixed threshold of 10, deliberately separate
+   from the admin's own configurable `low_stock_threshold` (that one only
+   drives the admin inventory dashboard's badge — different audience).
+2. **0-stock purchase gate**: `stockQuantity === 0` now disables Add to
+   Bag/Buy Now, independent of (in addition to) the existing manual
+   `is_sold_out` flag. Deliberately not merged into the Sold Out →
+   Request to Order flow — that stays tied only to the admin's explicit
+   flag, since incidental stock depletion isn't the same decision as
+   "switch this to pre-order."
+3. **Toast action button**: the bottom-center "Added to your bag"/"View
+   Bag" toast (same for the wishlist move-to-bag toast) had a completely
+   unstyled action button by default — now matches the site's own
+   black-pill `Button` styling via `toastOptions.classNames.actionButton`
+   in `components/ui/sonner.tsx`, one shared fix for both occurrences.
+4. **Stale checkout total, root-caused**: line items/subtotal were always
+   correctly reactive; `delivery.amount` and a coupon's `discountAmount`
+   are one-time snapshots that were never invalidated when the cart
+   changed after they were fetched/applied (e.g. removing an item from
+   the cart drawer while on checkout) — only an address edit reset them.
+   Fixed with a new effect that resets both (with a toast for the coupon
+   case) whenever the cart's subtotal changes, plus adding `delivery` to
+   the existing estimate effect's own dependency array — without that
+   second part, the reset alone left the page frozen on "Enter your state
+   and PIN code…" because that effect had no way to notice `delivery` had
+   changed out from under it in a separate render pass. Purely a display
+   bug — `createOrderAction` already re-validates everything server-side
+   at order time regardless, so nothing was ever at risk of overcharging.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium against a
+local prod server — a real 0-stock product shows "Out of Stock" with both
+buttons gated, a real 4-left product shows the red message with Add to
+Bag still enabled, a 20-in-stock control shows neither; the wishlist
+toast's action button computed styles confirm the black-pill treatment;
+a two-item guest checkout with a live ₹120 shipping estimate, after
+removing one item via the cart drawer, re-estimates fresh and the grand
+Total updates to match instead of staying frozen at the old two-item
+amount.
+
+Docs: `ARCHITECTURE.md` §14 (products table, `stock_quantity` note
+corrected), new §26.
+
+---
+
 ## 2026-10-05 — Buy-flow UX pass: mobile popup, cart lag, checkout polish
 
 Audited the full "Buy" journey (product page → mobile sign-in popup → cart

@@ -13,6 +13,7 @@ export interface ProductRow {
   is_new: boolean;
   is_best_seller: boolean;
   is_sold_out: boolean;
+  stock_quantity: number;
   custom_size_enabled: boolean;
   fabric: string;
   wash_care: string[];
@@ -31,7 +32,8 @@ export interface ProductRow {
 // arrive in the same round trip, so listing products never N+1s per row.
 const PRODUCT_SELECT = `
   id, slug, name, description, short_description, price, compare_at_price,
-  category, tags, is_new, is_best_seller, is_sold_out, custom_size_enabled,
+  category, tags, is_new, is_best_seller, is_sold_out, stock_quantity,
+  custom_size_enabled,
   fabric, wash_care, shipping_info, fit_notes,
   size_chart_image_url, size_chart_image_alt,
   product_images ( id, image_url, alt, tone, sort_order ),
