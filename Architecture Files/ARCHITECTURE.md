@@ -1193,14 +1193,25 @@ end to end when signed out, same as before the backend build.
 `WishlistProvider` additionally track a small module-level `isAuthed` flag
 (`lib/auth/client-auth-store.ts` — plain mutable value + subscriber set, same
 shape as `createLocalStore` but for one ephemeral boolean, not persisted).
-When `isAuthed`, every mutation (`addItem`/`updateQuantity`/`removeItem`/
-`clearCart`) still updates the local store optimistically (identical, instant
-UI) **and** fires the matching Server Action (`lib/services/cart.ts`/
-`wishlist.ts`) in the background; on that action's resolution the local store
-is silently overwritten with the authoritative server state (self-healing
-reconciliation — see the code comment in `cart-provider.tsx` for the one
-narrow edge case this doesn't cover: editing a just-added line within the
-same round trip window).
+When `isAuthed`, every mutation still updates the local store optimistically
+(identical, instant UI) first. What happens after that differs by mutation,
+reworked during the buy-flow UX pass (§25) after rapid +/- clicks in the cart
+drawer were visibly flickering:
+- `addItem` still fires its Server Action and, on resolution, overwrites the
+  local store with the authoritative server state — required here, not just
+  a reconciliation nicety: a brand-new line's optimistic `lineId` is only
+  the client-side composite `buildLineId` produces, not yet the real
+  `cart_items.id` a later `updateQuantity`/`removeItem` call needs to target
+  the right row (`lib/mappers/cart.ts#dbCartItemToCartItem` sets
+  `lineId: row.id`) — this is what upgrades it once the row actually exists.
+- `updateQuantity` debounces its Server Action per line (~400ms after the
+  last change) and never refetches afterward — a quantity change never
+  moves a line to a different row, so the already-correct optimistic update
+  is the full truth; the old refetch-after-every-click here is what caused
+  the flicker (two round trips per click, resolving out of order).
+- `removeItem` fires its Server Action and also never refetches — same
+  reasoning, plus it cancels any pending debounced `updateQuantity` write
+  for the line being removed.
 
 **Guest→account merge happens inside the sign-in/sign-up Server Action
 itself**, not via a client-side auth listener — §9.13 explains why the
@@ -2303,3 +2314,55 @@ once that's done, only the env var.
 above), `NEXT_PUBLIC_SITE_URL` (not a secret, defaults to
 `https://www.junefourteen.in` if unset — used only for links inside these
 emails, see the stale-`site.url` note above).
+
+## 25. Buy-flow UX pass (mobile popup, cart lag, checkout polish)
+
+Driven by a direct complaint that the product-page buy flow "feels stuck"
+and "blunt" — audited first (findings below), then fixed, all scoped to the
+four files named. No admin code, pricing/order logic, or shared UI
+primitive (`components/ui/*`) touched.
+
+- **Mobile-signup popup felt stuck behind the on-screen keyboard.**
+  `mobile-signup-dialog.tsx` was the one short, field-carrying dialog that
+  never got the `dvh`/top-anchored treatment §9's `FRONTEND.md` gotcha
+  already documents for `request-to-order-dialog.tsx` — same fix applied
+  here (see that entry for the full `dvh`-vs-`vh` reasoning).
+- **"Add to Bag" as a guest led nowhere.** `add-to-bag-panel.tsx`'s
+  `handleAddToBag` opened the mobile-signup popup for a guest but, unlike
+  `handleBuyNow` (which always continues to `/checkout` once the popup
+  closes), did nothing when it closed — the guest landed back on the exact
+  same product page with only a toast, which may already have faded, as
+  any sign the add worked. Replaced the old boolean `pendingCheckoutRef`
+  with `pendingActionRef: "cart" | "checkout" | null` so
+  `handleMobileSignupOpenChange` can route correctly for either button:
+  Buy Now still pushes to `/checkout`; Add to Bag now calls `openCart()`
+  (the cart drawer, §6) once the popup closes — submitted or dismissed,
+  same "purely additive, the add already happened regardless" rule the
+  popup already followed for Buy Now. An already-authed guest (no popup in
+  the way) still just gets the existing toast; the popup's own open
+  animation no longer races a toast on top of it.
+- **Cart quantity updates visibly lagged/flickered.** Root cause and fix:
+  §16 above.
+- **Checkout felt visually blunter than the PDP it follows.**
+  `checkout-content.tsx` got a conservative, additive-only polish pass
+  reusing already-established tokens — no new colors/shadows invented, no
+  shared primitive touched: the step-number badge, the Delivery/Coupon
+  success cards, and the Payment info card each gained
+  `shadow-[var(--shadow-subtle)]` (`app/(site)/globals.css`'s existing
+  token, previously admin-only); the Order Summary box gained
+  `shadow-[var(--shadow-subtle)]` + `rounded-xl` + `bg-card`; and "Place
+  Order"/"Complete Payment" now uses the same elevated-CTA recipe as the
+  PDP's Add to Bag/Buy Now buttons (a local `PRIMARY_CTA` const, copied
+  rather than imported cross-component to keep the two files independent —
+  same reasoning `add-to-bag-panel.tsx` already applies to its own
+  `PRIMARY_CTA`/`SECONDARY_CTA`/`STICKY_CTA` trio).
+
+**Verified**: `tsc`/`lint`/clean `next build` (product pages still
+prerender their known `●` paths); headless Chromium end to end against a
+local prod server — mobile popup opens top-anchored (not centered) on a
+390×844 viewport and stays centered at `sm:`+; closing it after Add to Bag
+(submitted or dismissed) opens the cart drawer; Buy Now still reaches
+`/checkout` after the popup closes; four rapid quantity clicks in the cart
+drawer settle on the right number instantly with no flicker across the
+debounce window; a full-page screenshot of `/checkout` confirms the polish
+renders cleanly with no layout breakage.

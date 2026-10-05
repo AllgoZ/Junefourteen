@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -91,6 +92,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     getCartForCurrentUser().then(setCartItemsLocally);
   }, []);
 
+  // Per-line debounce for updateQuantity's server write (below) — declared
+  // outside any one callback since removeItem also needs to cancel a
+  // pending write for a line that just got deleted.
+  const quantityWriteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
   const addItem = useCallback(
     (item: Omit<CartItem, "lineId" | "quantity">, quantity = 1) => {
       const lineId = buildLineId(item);
@@ -102,6 +108,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return [...prev, { ...item, lineId, quantity }];
       });
       if (isAuthed) {
+        // Unlike updateQuantity/removeItem below, a brand-new line's
+        // optimistic lineId is only the client-side composite from
+        // buildLineId — not yet the real cart_items.id that a later
+        // updateQuantity/removeItem call needs to target the right row
+        // (lib/mappers/cart.ts#dbCartItemToCartItem sets lineId: row.id).
+        // This resync is what upgrades it once the row actually exists
+        // server-side, so unlike the other two it has to stay.
         addCartItemAction(item, quantity).then(syncFromServer);
       }
     },
@@ -115,21 +128,44 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           ? prev.filter((i) => i.lineId !== lineId)
           : prev.map((i) => (i.lineId === lineId ? { ...i, quantity } : i))
       );
-      if (isAuthed) {
-        updateCartItemQuantityAction(lineId, quantity).then(syncFromServer);
-      }
+      if (!isAuthed) return;
+
+      // Debounced and, unlike addItem, never resynced afterward. Rapid +/-
+      // clicks used to fire one Server Action *and* one full cart refetch
+      // per click — on anything but a fast connection, those overlapping
+      // round trips could resolve out of order and visibly flicker the
+      // quantity back before "correcting" itself. A quantity change never
+      // moves a line to a different row, so the optimistic update above is
+      // already the full truth; only the debounced write below is needed to
+      // persist it, once the user actually stops clicking.
+      const timers = quantityWriteTimers.current;
+      const pending = timers.get(lineId);
+      if (pending) clearTimeout(pending);
+      timers.set(
+        lineId,
+        setTimeout(() => {
+          timers.delete(lineId);
+          updateCartItemQuantityAction(lineId, quantity);
+        }, 400)
+      );
     },
-    [isAuthed, syncFromServer]
+    [isAuthed]
   );
 
   const removeItem = useCallback(
     (lineId: string) => {
       cartStore.set((prev) => prev.filter((i) => i.lineId !== lineId));
+
+      const pending = quantityWriteTimers.current.get(lineId);
+      if (pending) {
+        clearTimeout(pending);
+        quantityWriteTimers.current.delete(lineId);
+      }
       if (isAuthed) {
-        removeCartItemAction(lineId).then(syncFromServer);
+        removeCartItemAction(lineId);
       }
     },
-    [isAuthed, syncFromServer]
+    [isAuthed]
   );
 
   const clearCart = useCallback(() => {

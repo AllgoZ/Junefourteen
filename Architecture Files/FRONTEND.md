@@ -337,7 +337,10 @@ the format is deliberately this narrow.
   top-anchored on mobile only, `top-4 translate-y-0`, so the keyboard eats
   into empty space below the dialog instead of pushing an already-centered
   dialog further off-screen) and `hero-section.tsx`'s `h-[75dvh]` for the
-  same unit used the same way.
+  same unit used the same way. `mobile-signup-dialog.tsx` (the add-to-bag/
+  buy-now quick-account popup, §16) got the identical fix during the buy-flow
+  UX pass (§25) — it was left off the original pass despite being exactly
+  the kind of short-but-keyboard-triggering dialog this gotcha describes.
 - **Scoping an override via a `className` prop, not editing the shared
   primitive**: a one-off dialog needing different sizing/position than
   `components/ui/dialog.tsx`'s base `DialogContent` should pass a

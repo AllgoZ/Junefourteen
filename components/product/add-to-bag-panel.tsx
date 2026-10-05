@@ -61,18 +61,23 @@ export function AddToBagPanel({
   // Add-to-bag/buy-now account-creation popup (mobile number only, see
   // mobile-signup-dialog.tsx) — guests only, and purely additive: the
   // underlying add/checkout action below always happens regardless of
-  // whether this dialog is submitted or skipped.
+  // whether this dialog is submitted or skipped. What happens once it
+  // closes depends on which button opened it: Buy Now always continues to
+  // checkout; Add to Bag opens the cart drawer so closing the popup (either
+  // way) actually shows the guest their bag instead of leaving them back on
+  // the same page with nothing to look at.
   const [mobileSignupOpen, setMobileSignupOpen] = useState(false);
-  const pendingCheckoutRef = useRef(false);
+  const pendingActionRef = useRef<"cart" | "checkout" | null>(null);
   const [requestToOrderOpen, setRequestToOrderOpen] = useState(false);
   const [requested, setRequested] = useState(alreadyRequested);
 
   function handleMobileSignupOpenChange(open: boolean) {
     setMobileSignupOpen(open);
-    if (!open && pendingCheckoutRef.current) {
-      pendingCheckoutRef.current = false;
-      router.push("/checkout");
-    }
+    if (open) return;
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    if (action === "checkout") router.push("/checkout");
+    else if (action === "cart") openCart();
   }
 
   useEffect(() => {
@@ -146,10 +151,19 @@ export function AddToBagPanel({
     if (product.isSoldOut || !validate()) return;
     addItem(buildLine(), quantity);
     setQuantity(1);
-    toast.success(`${product.name} added to your bag.`, {
-      action: { label: "View Bag", onClick: openCart },
-    });
-    if (!getIsAuthed()) setMobileSignupOpen(true);
+    if (getIsAuthed()) {
+      // No popup in this case — the toast is the only confirmation needed.
+      toast.success(`${product.name} added to your bag.`, {
+        action: { label: "View Bag", onClick: openCart },
+      });
+    } else {
+      // The cart drawer opening once the popup closes is the confirmation
+      // here instead — a toast racing the popup's own open animation just
+      // adds noise. Opens the bag either way (submitted or dismissed), same
+      // "purely additive" rule the popup already follows for Buy Now.
+      pendingActionRef.current = "cart";
+      setMobileSignupOpen(true);
+    }
   }
 
   function handleBuyNow() {
@@ -158,7 +172,7 @@ export function AddToBagPanel({
     if (getIsAuthed()) {
       router.push("/checkout");
     } else {
-      pendingCheckoutRef.current = true;
+      pendingActionRef.current = "checkout";
       setMobileSignupOpen(true);
     }
   }

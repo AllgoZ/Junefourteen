@@ -47,7 +47,15 @@ export function MobileSignupDialog({ open, onOpenChange }: MobileSignupDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/*
+       * Same mobile-keyboard fix as request-to-order-dialog.tsx: the shared
+       * DialogContent primitive centers via `top-1/2 -translate-y-1/2` with
+       * no max-height/scroll of its own, which left this dialog feeling
+       * "stuck" once the on-screen keyboard shrank the visible viewport
+       * (dvh tracks that; plain vh/the base primitive doesn't). Top-anchored
+       * and scrollable on mobile only; unchanged, centered on sm:+.
+       */}
+      <DialogContent className="top-4 flex max-h-[calc(100dvh-2rem)] translate-y-0 flex-col overflow-y-auto sm:top-1/2 sm:max-h-[85vh] sm:-translate-y-1/2">
         <DialogHeader>
           <DialogTitle>Sign in or create an account</DialogTitle>
           <DialogDescription>

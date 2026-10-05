@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useCart } from "@/components/providers/cart-provider";
 import { INDIAN_STATES } from "@/lib/config/indian-states";
+import { cn } from "@/lib/utils";
 import {
   createOrderAction,
   verifyRazorpayPaymentAction,
@@ -40,6 +41,16 @@ interface AddressForm {
   state: string;
   pin: string;
 }
+
+/**
+ * Same elevated-CTA recipe as the PDP's Add to Bag/Buy Now buttons
+ * (components/product/add-to-bag-panel.tsx#PRIMARY_CTA) — soft top
+ * highlight, drop shadow, and a press-scale — so the final "Place Order"
+ * step feels like a continuation of the same buy flow instead of a plainer,
+ * unrelated page.
+ */
+const PRIMARY_CTA =
+  "h-14 rounded-2xl text-base shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_14px_30px_-10px_rgba(0,0,0,0.5)] transition-[transform,box-shadow,background-color] duration-150 ease-out hover:bg-foreground-secondary active:scale-[0.97] active:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_4px_14px_-6px_rgba(0,0,0,0.4)]";
 
 const EMPTY_FORM: AddressForm = {
   email: "",
@@ -72,7 +83,7 @@ function Section({
   return (
     <section className="border-b border-border py-6 first:pt-0 last:border-0">
       <h2 className="mb-4 flex items-center gap-2.5 text-sm font-medium text-foreground">
-        <span className="flex size-6 items-center justify-center rounded-full bg-foreground text-xs text-background">
+        <span className="flex size-6 items-center justify-center rounded-full bg-foreground text-xs text-background shadow-[var(--shadow-subtle)]">
           {step}
         </span>
         {title}
@@ -433,7 +444,7 @@ export function CheckoutContent({
 
         <Section step={3} title="Delivery Method">
           {delivery ? (
-            <div className="flex items-start gap-3 rounded-md border border-foreground p-4">
+            <div className="flex items-start gap-3 rounded-md border border-foreground p-4 shadow-[var(--shadow-subtle)]">
               <Truck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-foreground">Standard Delivery</p>
@@ -463,7 +474,7 @@ export function CheckoutContent({
 
         <Section step={4} title="Coupon">
           {appliedCoupon ? (
-            <div className="flex items-center gap-3 rounded-md border border-foreground p-4">
+            <div className="flex items-center gap-3 rounded-md border border-foreground p-4 shadow-[var(--shadow-subtle)]">
               <Tag className="size-4 shrink-0" aria-hidden="true" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-foreground">{appliedCoupon.code}</p>
@@ -492,7 +503,7 @@ export function CheckoutContent({
         </Section>
 
         <Section step={5} title="Payment">
-          <div className="flex items-center gap-3 rounded-md border border-border bg-muted/50 p-4">
+          <div className="flex items-center gap-3 rounded-md border border-border bg-muted/50 p-4 shadow-[var(--shadow-subtle)]">
             <CreditCard className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <p className="text-sm text-muted-foreground">
               Pay securely with Cards, UPI, Netbanking, or Wallets via Razorpay — you&apos;ll
@@ -504,7 +515,7 @@ export function CheckoutContent({
 
       <div className="lg:sticky lg:top-20 lg:self-start">
         <h2 className="mb-4 text-sm font-medium text-foreground">Order Summary</h2>
-        <div className="flex flex-col divide-y divide-border rounded-md border border-border px-4">
+        <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card px-4 shadow-[var(--shadow-subtle)]">
           {items.map((item) => (
             <div key={item.lineId} className="flex items-center gap-3 py-3">
               <div className="relative w-14 shrink-0">
@@ -558,7 +569,7 @@ export function CheckoutContent({
           </div>
         </div>
 
-        <Button size="lg" className="mt-6 w-full" disabled={placing} onClick={placeOrder}>
+        <Button size="lg" className={cn("mt-6 w-full", PRIMARY_CTA)} disabled={placing} onClick={placeOrder}>
           {placing
             ? pendingOrder
               ? "Opening Payment…"

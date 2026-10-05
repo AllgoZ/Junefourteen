@@ -14,6 +14,55 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-10-05 — Buy-flow UX pass: mobile popup, cart lag, checkout polish
+
+Audited the full "Buy" journey (product page → mobile sign-in popup → cart
+→ checkout) against a direct complaint that it "feels stuck" on mobile and
+"blunt" overall, then fixed what the audit found — four files touched, all
+additive/CSS-scoped, no admin/pricing/order logic changed.
+
+1. **Mobile sign-in popup felt stuck behind the keyboard.**
+   `mobile-signup-dialog.tsx` never got the `dvh`/top-anchored fix already
+   proven on `request-to-order-dialog.tsx` (`FRONTEND.md`'s dvh-vs-vh
+   gotcha). Same `className` fix applied; desktop (`sm:`+) unchanged.
+2. **"Add to Bag" as a guest led nowhere after the popup.** It opened the
+   popup but, unlike Buy Now, did nothing once the popup closed — guest
+   landed back on the same page with only a toast. `add-to-bag-panel.tsx`
+   now opens the cart drawer once the popup closes (submitted or
+   dismissed), matching Buy Now's existing "always proceeds regardless"
+   rule. Already-authed guests still just get the toast, unchanged.
+3. **Cart quantity updates visibly lagged/flickered for signed-in users.**
+   Root cause: every +/- click fired a Server Action *and* a full cart
+   refetch, with no debounce — rapid clicks raced each other and could
+   visibly revert-then-correct. `cart-provider.tsx#updateQuantity` now
+   debounces its write (~400ms) and never refetches afterward (a quantity
+   change never needs a new `lineId`); `removeItem` likewise stops
+   refetching and cancels any pending debounced write for that line.
+   `addItem` deliberately keeps its post-write refetch — a new line's
+   `lineId` is only a client-side placeholder until that refetch supplies
+   the real `cart_items.id`, which `updateQuantity`/`removeItem` need to
+   target the right row.
+4. **Checkout read visually blunter than the product page.** Conservative,
+   additive-only polish on `checkout-content.tsx`: the existing
+   `--shadow-subtle` token (already used in the admin, previously unused
+   on the storefront) on the step badges and the Delivery/Coupon/Payment
+   info cards; the Order Summary box gained the same shadow +
+   `rounded-xl` + `bg-card`; "Place Order"/"Complete Payment" now uses the
+   same elevated-CTA treatment as the PDP's Add to Bag/Buy Now buttons. No
+   shared `components/ui/*` primitive touched.
+
+**Verified**: `tsc`/`lint`/clean `next build` all pass; headless Chromium
+against a local prod server confirmed all four fixes end to end (popup
+position on a 390×844 viewport vs. desktop, cart-drawer-opens-after-popup
+for both submit and dismiss, Buy Now still reaches `/checkout`, four rapid
+quantity clicks settle instantly with no flicker) plus a full-page
+screenshot of the polished `/checkout`.
+
+Docs: `ARCHITECTURE.md` §16 (cart sync behavior corrected to match),
+new §25; `FRONTEND.md`'s dvh/keyboard gotcha entry.
+
+---
+
 ## 2026-09-15 — Default size chart image + fix intermittent "Add new product" photo-upload error
 
 Three related admin fixes/additions, all scoped to the product form.
