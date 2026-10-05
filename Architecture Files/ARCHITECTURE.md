@@ -2414,7 +2414,10 @@ the storefront for the first time), `add-to-bag-panel.tsx`,
   default — verified via the wishlist move-to-bag flow (the one path that
   fires this toast unconditionally, auth or not, useful for testing it
   without a real session): computed styles confirm `#0a0a0a` background,
-  white text, fully rounded.
+  white text, fully rounded. (§27 later replaced the Add to Bag side of
+  this specifically — the toast auto-dismissing was itself the complaint —
+  with a persistent bar; this styling fix stays exactly as relevant for
+  the wishlist toast, which still uses it unchanged.)
 - **Stale checkout total, root-caused** — `checkout-content.tsx`'s line
   items/subtotal were always correctly reactive; `delivery.amount` and a
   coupon's `discountAmount` are both one-time snapshots computed against
@@ -2454,3 +2457,53 @@ estimate (₹120, Karnataka/560001), after removing one item via the cart
 drawer, re-estimates fresh (still ₹120 against the smaller remaining
 order here) and the grand Total updates to match — not left showing the
 old two-item amount.
+
+## 27. Persistent "added to your bag" confirmation (replaces the toast for this one flow)
+
+Direct complaint about §26's toast fix: it was better-looking, but still a
+`sonner` toast, so it still auto-dismissed after a few seconds — not what
+was wanted for Add to Bag specifically ("shouldn't disappear until I leave
+the product"). Scoped entirely to `add-to-bag-panel.tsx`; the wishlist
+move-to-bag toast and every other toast in the app are untouched.
+
+- `handleAddToBag` no longer calls `toast.success(...)` for an authed user
+  at all. Instead it always sets a new `addedToBag` state (image/name/
+  price/quantity snapshot of what was just added) regardless of auth
+  state — for guests this renders underneath/behind the existing mobile-
+  signup popup and stays once it closes, same as the cart drawer already
+  did (§25); for an already-authed visitor it just shows immediately, no
+  popup in the way.
+- **No auto-dismiss anywhere** — plain `useState`, cleared only by its own
+  close (×) button, by tapping "View Bag" (which also opens the cart), or
+  by leaving the page. No timer, no effect-based reset tied to
+  `product.id` either: tested directly (headless Chromium, client-side
+  navigation from one product to another) and confirmed the App Router
+  already remounts this component on a slug change on its own — adding a
+  defensive reset effect for that case would have hit
+  `react-hooks/set-state-in-effect` for no actual benefit, so it was
+  deliberately left out after verifying it wasn't needed, not an
+  oversight.
+- **Mutually exclusive with the existing scroll-triggered sticky "Add to
+  Bag" bar** (§6/`STICKY_CTA`) — both are `fixed inset-x-0 bottom-0`, so
+  the sticky bar's render condition gained `&& !addedToBag` to stop them
+  from ever stacking. The sticky bar's own purpose (re-add without
+  scrolling up) is redundant anyway once there's a confirmation with its
+  own "View Bag" showing.
+- **Richer content, and responsive** — thumbnail (`ProductImage`, reused
+  from the cart/checkout convention), product name, "Qty N · price", and a
+  "View Bag" button, under a small "✓ Added to your bag" header with its
+  own close button. Full-width bar on mobile (same bottom slot and
+  `safe-area-inset-bottom` handling the sticky bar used); a compact
+  `380px` floating card bottom-right on `sm:`+ (`--shadow-overlay`, an
+  existing token, previously storefront-unused) rather than a bar
+  spanning a wide desktop viewport. One component, two layouts via
+  breakpoint classes, not two separate components.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium — bar
+shows with correct product/price/qty details, still visible after a 5s
+wait (no auto-dismiss), exactly one "Add to Bag"-shaped control on screen
+at a time (sticky bar correctly suppressed), "View Bag" opens the cart
+drawer and dismisses the bar, navigating to a different product does not
+carry the bar over, and the desktop card's measured bounding box lands
+exactly at the expected `right-6`/`bottom-6` offset in a 1280×900
+viewport.

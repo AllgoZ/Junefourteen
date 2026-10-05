@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "motion/react";
-import { Minus, Plus } from "lucide-react";
+import { CheckCircle2, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Price } from "@/components/product/price";
+import { ProductImage } from "@/components/product/product-image";
 import { WishlistButton } from "@/components/product/wishlist-button";
 import { SizeAndFit } from "@/components/product/size-and-fit";
 import { SleeveSelector } from "@/components/product/sleeve-selector";
@@ -57,6 +58,20 @@ export function AddToBagPanel({
 
   const inlineButtonRef = useRef<HTMLDivElement>(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
+
+  // Persistent "added to your bag" confirmation — replaces the old
+  // auto-dismissing toast, which is exactly what made it feel like it
+  // "disappeared." Plain useState, no timer: it only ever clears via its
+  // own close button or by leaving this product page (the component
+  // unmounts on navigation), per the brief. Mutually exclusive with the
+  // scroll-triggered sticky bar just below — both are fixed-bottom, so
+  // only one shows at a time.
+  const [addedToBag, setAddedToBag] = useState<{
+    image?: Product["images"][number];
+    name: string;
+    price: number;
+    quantity: number;
+  } | null>(null);
 
   // Add-to-bag/buy-now account-creation popup (mobile number only, see
   // mobile-signup-dialog.tsx) — guests only, and purely additive: the
@@ -159,17 +174,13 @@ export function AddToBagPanel({
   function handleAddToBag() {
     if (product.isSoldOut || isOutOfStock || !validate()) return;
     addItem(buildLine(), quantity);
+    setAddedToBag({ image: product.images[0], name: product.name, price: displayPrice, quantity });
     setQuantity(1);
-    if (getIsAuthed()) {
-      // No popup in this case — the toast is the only confirmation needed.
-      toast.success(`${product.name} added to your bag.`, {
-        action: { label: "View Bag", onClick: openCart },
-      });
-    } else {
-      // The cart drawer opening once the popup closes is the confirmation
-      // here instead — a toast racing the popup's own open animation just
-      // adds noise. Opens the bag either way (submitted or dismissed), same
-      // "purely additive" rule the popup already follows for Buy Now.
+    if (!getIsAuthed()) {
+      // The cart drawer opening once the popup closes is still its own
+      // confirmation for guests — this bar shows underneath/after it either
+      // way (submitted or dismissed), same "purely additive" rule the popup
+      // already follows for Buy Now.
       pendingActionRef.current = "cart";
       setMobileSignupOpen(true);
     }
@@ -317,7 +328,7 @@ export function AddToBagPanel({
       </div>
 
       <AnimatePresence>
-        {!product.isSoldOut && !isOutOfStock && showStickyBar && (
+        {!product.isSoldOut && !isOutOfStock && !addedToBag && showStickyBar && (
           <motion.div
             initial={{ y: "100%", opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -331,6 +342,59 @@ export function AddToBagPanel({
             <Button onClick={handleAddToBag} className={cn("max-w-[240px] flex-1", STICKY_CTA)}>
               Add to Bag
             </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/*
+        Persistent "added to your bag" confirmation. Fixed full-width bar on
+        mobile (same slot the sticky Add to Bag bar above uses — the two are
+        mutually exclusive, see its condition), a compact floating card
+        bottom-right on desktop rather than a bar spanning the whole
+        viewport. No auto-dismiss timer anywhere in here on purpose.
+      */}
+      <AnimatePresence>
+        {addedToBag && (
+          <motion.div
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background shadow-[var(--shadow-overlay)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-[380px] sm:rounded-2xl sm:border sm:pb-4"
+          >
+            <div className="flex items-center gap-2 px-4 pt-3 pb-1.5 text-foreground sm:px-4 sm:pt-4">
+              <CheckCircle2 className="size-4 shrink-0 text-foreground" aria-hidden="true" />
+              <span className="text-xs font-medium tracking-[0.08em] uppercase">Added to your bag</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setAddedToBag(null)}
+                className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3 px-4 pb-3 sm:pb-4">
+              <div className="w-12 shrink-0 overflow-hidden rounded-lg">
+                <ProductImage image={addedToBag.image} alt={addedToBag.name} aspect="square" sizes="48px" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{addedToBag.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  Qty {addedToBag.quantity} · {formatPrice(addedToBag.price)}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  openCart();
+                  setAddedToBag(null);
+                }}
+                className="shrink-0 rounded-full"
+              >
+                View Bag
+              </Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -14,6 +14,43 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-10-05 — Persistent "added to your bag" confirmation (replaces the toast)
+
+Direct follow-up to the toast-polish fix below: it looked better, but was
+still a `sonner` toast, so it still auto-dismissed after a few seconds —
+not what was wanted specifically for Add to Bag ("shouldn't disappear
+until I leave the product"). Scoped to `add-to-bag-panel.tsx` only — the
+wishlist move-to-bag toast and every other toast stay untouched.
+
+- `handleAddToBag` no longer calls `toast.success(...)`. It now always
+  sets a persistent `addedToBag` snapshot (thumbnail/name/price/qty),
+  guest or authed — for guests it sits underneath the existing mobile
+  sign-in popup and stays once that closes, same as the cart drawer
+  already did.
+- No auto-dismiss: plain `useState`, cleared only by its own close
+  button, by "View Bag" (which also opens the cart), or by leaving the
+  page. Verified directly (not assumed) that the App Router already
+  remounts this component on a product-to-product navigation, so no
+  extra reset effect was needed — added one, hit
+  `react-hooks/set-state-in-effect`, tested whether it was actually
+  necessary, confirmed it wasn't, removed it.
+- Mutually exclusive with the existing scroll-triggered sticky "Add to
+  Bag" bar — both are fixed-bottom, so the sticky bar's condition gained
+  `&& !addedToBag` to stop them stacking.
+- Richer + responsive: thumbnail, name, "Qty N · price", "View Bag" —
+  full-width bar on mobile, a compact floating card bottom-right on
+  desktop, one component via breakpoint classes.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium — correct
+details shown, still visible after 5s (no auto-dismiss), no stacked
+bottom bars, View Bag opens the cart and dismisses it, doesn't carry over
+to a different product, desktop card lands exactly at the expected
+bottom-right offset.
+
+Docs: `ARCHITECTURE.md` new §27, §26's toast note corrected.
+
+---
+
 ## 2026-10-05 — Stock-aware PDP, toast polish, stale-checkout-total fix
 
 Direct follow-up to the buy-flow pass below: low-stock urgency messaging,
