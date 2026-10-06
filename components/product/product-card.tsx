@@ -64,7 +64,7 @@ export function ProductCard({ product, priority, className, dark = false }: Prod
             </span>
           ) : isLowStock ? (
             <span className="rounded-sm bg-background/45 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-destructive uppercase">
-              Only {product.stockQuantity} Left
+              {product.stockQuantity} Left
             </span>
           ) : product.isNew ? (
             <span className="text-[10px] font-medium tracking-[0.14em] text-white uppercase">New</span>
