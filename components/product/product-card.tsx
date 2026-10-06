@@ -16,6 +16,14 @@ interface ProductCardProps {
 export function ProductCard({ product, priority, className, dark = false }: ProductCardProps) {
   const [primary, secondary] = product.images;
 
+  // Same rules as the PDP's identical logic (components/product/
+  // add-to-bag-panel.tsx) — independent of the admin's manual isSoldOut
+  // flag, driven by the numeric stock_quantity instead. undefined only for
+  // the historical mock catalog, never a real product.
+  const isOutOfStock = !product.isSoldOut && product.stockQuantity === 0;
+  const isLowStock =
+    !product.isSoldOut && !isOutOfStock && product.stockQuantity !== undefined && product.stockQuantity < 10;
+
   return (
     <div className={cn("group relative flex flex-col", className)}>
       <Link
@@ -49,6 +57,14 @@ export function ProductCard({ product, priority, className, dark = false }: Prod
           {product.isSoldOut ? (
             <span className="rounded-sm bg-background/45 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-destructive uppercase">
               Sold Out
+            </span>
+          ) : isOutOfStock ? (
+            <span className="rounded-sm bg-background/45 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-destructive uppercase">
+              Out of Stock
+            </span>
+          ) : isLowStock ? (
+            <span className="rounded-sm bg-background/45 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-destructive uppercase">
+              Only {product.stockQuantity} Left
             </span>
           ) : product.isNew ? (
             <span className="text-[10px] font-medium tracking-[0.14em] text-white uppercase">New</span>

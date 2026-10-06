@@ -2384,7 +2384,8 @@ the storefront for the first time), `add-to-bag-panel.tsx`,
   the historical `lib/mock-data/products.ts` catalog, which predates this
   field, doesn't need touching; every real DB-backed product always has a
   real number), and `dbProductToProduct` maps it straight through.
-- **Low-stock urgency message** (`add-to-bag-panel.tsx`) — `0 <
+- **Low-stock urgency message** (`add-to-bag-panel.tsx`, PDP only at the
+  time — §28 later extended the same rules to the grid card) — `0 <
   stockQuantity < 10` shows "Only N left in stock — order soon" in
   `text-destructive` (the site's existing red token, `oklch(0.55 0.16
   25)`) under the description. Deliberately **not** the admin's own
@@ -2507,3 +2508,34 @@ drawer and dismisses the bar, navigating to a different product does not
 carry the bar over, and the desktop card's measured bounding box lands
 exactly at the expected `right-6`/`bottom-6` offset in a 1280×900
 viewport.
+
+## 28. Low-stock/out-of-stock badge on the product grid card too
+
+Reported as "the low-stock count doesn't show on the products page" —
+audited first. It wasn't a bug: a fresh `next build` confirmed §26's PDP
+message rendered correctly for the real product in question
+(`venmugil-mauve`, `stock_quantity: 8`) — a `curl`+`grep` check that
+*looked* like a miss was just React's SSR comment markers around the
+interpolated number breaking a naive regex, not an actual absence. The
+real gap was `ProductCard` (`components/product/product-card.tsx`, used
+by every grid listing — shop, collections, best sellers, new arrivals,
+wishlist) never had a low-stock/out-of-stock indicator at all — compared
+directly to Shopify's own product-listing badges, which was the
+reference point in the complaint.
+
+Added the identical rules §26 already established for the PDP (same
+`isOutOfStock`/`isLowStock` conditions, duplicated inline rather than
+extracted to a shared helper — two small boolean expressions, not worth a
+cross-file abstraction for) into the card's existing top-left badge slot,
+which already had a priority order (`isSoldOut` → `isNew` →
+`compareAtPrice` → nothing). New order: `isSoldOut` → `isOutOfStock` →
+`isLowStock` → `isNew` → `compareAtPrice` → nothing — "Sold Out"/"Out of
+Stock"/"Only N Left" all share the same `bg-background/45` pill treatment
+the card's existing "Sold Out" badge already used (for legibility over
+arbitrary photo backgrounds); "New"/"Sale" stay plain white text, unchanged.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium against
+`/shop` — "Only 8 Left" renders on Venmugil Mauve with the correct red
+(`text-destructive`) color, and a full-grid screenshot confirms several
+other low-stock products also correctly flagged (4/5/8 left) alongside
+unaffected "New"/"Sold Out" badges on the same page.

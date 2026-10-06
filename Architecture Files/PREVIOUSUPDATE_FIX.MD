@@ -14,6 +14,33 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-10-06 — Low-stock/out-of-stock badge on the product grid card
+
+Reported as "the low-stock count doesn't show on the products page."
+Audited first, not assumed: a fresh `next build` confirmed the PDP
+message already worked correctly for the real product in question
+(`venmugil-mauve`, `stock_quantity: 8`) — my first `curl`+`grep` check
+looked like a miss but was just React's SSR comment markers around the
+interpolated number breaking a naive regex, not an actual bug. The real
+gap: `ProductCard` (every grid listing — shop, collections, best sellers,
+new arrivals, wishlist) never had a low-stock/out-of-stock indicator at
+all, which is what the Shopify comparison in the report was pointing at.
+
+Added the identical rules the PDP already had into the card's existing
+top-left badge slot (which already prioritized Sold Out → New → Sale):
+new order is Sold Out → Out of Stock → Only N Left → New → Sale →
+nothing, with the new states sharing the same background-pill treatment
+the existing Sold Out badge already used.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium against
+`/shop` confirmed "Only 8 Left" renders correctly in red on Venmugil
+Mauve, and a full-grid screenshot shows several other low-stock products
+flagged correctly alongside unaffected New/Sold Out badges.
+
+Docs: `ARCHITECTURE.md` new §28, §26's PDP note cross-referenced.
+
+---
+
 ## 2026-10-05 — Persistent "added to your bag" confirmation (replaces the toast)
 
 Direct follow-up to the toast-polish fix below: it looked better, but was
