@@ -40,10 +40,11 @@ Your full catalog. From here you can:
 - **Edit an existing product** — same fields, plus you can upload,
   reorder, or delete photos. The first photo in the list is always the
   one shown on the shop grid.
-- **Mark a product as Sold Out** — this is the one flag that actually
-  stops customers from buying it. When a product is sold out, its "Add to
-  Bag" button is replaced on the product page with **"Request to Order"**
-  (more on that under **Order Requests** below).
+- **Mark a product as Sold Out** — when you flip this on, its "Add to
+  Bag" button is replaced on the product page with **"Request to
+  Order"** (more on that under **Order Requests** below). This is for
+  when you've deliberately decided to take pre-orders on something, not
+  just for "we're temporarily out" — see **Inventory** below for that.
 - **Sell a product piece by piece** (the "Pieces & Pricing" section on the
   product form) — for a set like a kurta with a top, bottom, and dupatta,
   add each piece with its own name and price (e.g. Top ₹1,099, Bottom
@@ -72,11 +73,29 @@ Your full catalog. From here you can:
 A simple stock-tracking view across every product — current stock count
 and a low-stock warning threshold, editable inline right in the table.
 
-Important: **this is for your own visibility only.** Changing a stock
-number here does **not** automatically mark a product Sold Out or stop
-people from buying it. The **Sold Out** toggle on the product itself
-(under Products) is the only thing that actually blocks a purchase — think
-of Inventory as your notebook, and the Sold Out flag as the light switch.
+The stock count you set here now shows up on the live site too, not just
+in this table:
+
+- **Under 10 in stock** — the product page shows a red "Only N left in
+  stock — order soon" line, and the same product's card on the shop grid
+  gets a matching "Only N Left" badge (next to Sold Out/New/Sale).
+- **Exactly 0 in stock** — "Add to Bag"/"Buy Now" are disabled and show
+  "Out of Stock," and the quantity picker won't go above what's actually
+  left (it stops a customer from, say, selecting 5 when only 3 remain).
+  This happens automatically from the stock number alone — you don't need
+  to also flip the **Sold Out** toggle for it.
+
+The **Low Stock Threshold** field next to the stock count (also here, and
+on each product's own Organization section) is separate from that "under
+10" message above — it only drives this table's own "Low Stock" flag for
+your own tracking, it isn't shown to customers and doesn't use the same
+number.
+
+**Sold Out** (under Products) is still its own, separate thing — use it
+when you've deliberately decided to let people pre-order something (it
+swaps the button for "Request to Order," see below), not for ordinary
+restocking. Setting stock to 0 already blocks ordinary purchases on its
+own, the way described above.
 
 ---
 

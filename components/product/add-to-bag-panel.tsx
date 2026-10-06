@@ -117,6 +117,10 @@ export function AddToBagPanel({
   const isOutOfStock = !product.isSoldOut && product.stockQuantity === 0;
   const isLowStock =
     !product.isSoldOut && !isOutOfStock && product.stockQuantity !== undefined && product.stockQuantity < 10;
+  // Caps the quantity stepper below at however many are actually in stock —
+  // same stockQuantity, no separate admin setting. undefined (the historical
+  // mock catalog only) leaves the stepper uncapped, same as before this fix.
+  const atMaxQuantity = product.stockQuantity !== undefined && quantity >= product.stockQuantity;
 
   /** Selected pieces in the product's own sort order. */
   const selectedPieces = pieces.filter((p) => pieceIds.has(p.id));
@@ -276,12 +280,20 @@ export function AddToBagPanel({
               <button
                 type="button"
                 aria-label="Increase quantity"
-                onClick={() => setQuantity((q) => q + 1)}
-                className="flex size-11 items-center justify-center text-foreground hover:bg-muted"
+                disabled={atMaxQuantity}
+                onClick={() =>
+                  setQuantity((q) => (product.stockQuantity !== undefined ? Math.min(product.stockQuantity, q + 1) : q + 1))
+                }
+                className="flex size-11 items-center justify-center text-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
               >
                 <Plus className="size-4" aria-hidden="true" />
               </button>
             </div>
+            {atMaxQuantity && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Only {product.stockQuantity} available
+              </p>
+            )}
           </div>
         </>
       )}

@@ -2539,3 +2539,33 @@ arbitrary photo backgrounds); "New"/"Sale" stay plain white text, unchanged.
 (`text-destructive`) color, and a full-grid screenshot confirms several
 other low-stock products also correctly flagged (4/5/8 left) alongside
 unaffected "New"/"Sold Out" badges on the same page.
+
+## 29. PDP quantity stepper capped at available stock
+
+The quantity stepper (`add-to-bag-panel.tsx`) had no upper bound at
+all — `setQuantity((q) => q + 1)` with no ceiling, so a visitor could
+select (and add to bag) more units than `stock_quantity` actually allows,
+independent of the §26/§28 messaging/badges that already warn about low
+stock without ever constraining the picker itself.
+
+Fix: a new `atMaxQuantity` derived flag (`quantity >= product.stockQuantity`,
+only when `stockQuantity` is a real number — same "`undefined` only for the
+historical mock catalog" carve-out §26/§28 already use) — the "+" button
+disables at that point (`disabled:pointer-events-none disabled:opacity-40`,
+matching the disabled-state convention used elsewhere in this component)
+and a small `text-muted-foreground` "Only N available" line appears under
+the stepper once capped, mirroring the "−" button's existing `Math.max(1,
+...)` floor. The increment handler itself also clamps
+(`Math.min(stockQuantity, q + 1)`) rather than relying on the `disabled`
+attribute alone to prevent going over. No change to `validate()`/
+`handleAddToBag`/`handleBuyNow` — capping the stepper at the UI level is
+sufficient since there's no other way to set `quantity` (no free-text
+input), and checkout's `createOrderAction` already re-validates everything
+server-side regardless (§16).
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium against
+three real products at different stock levels — `venmugil-mauve` (stock
+8): 12 clicks stop at 8, "+" disables, "Only 8 available" shown;
+`venmugil-grey` (stock 4): stops at 4; `kanakavalli-wine-raw-silk` (stock
+20, a control case): reaches 11 after 10 clicks with "+" still enabled,
+confirming normal-stock products aren't capped prematurely.

@@ -14,6 +14,36 @@ github.com/AllgoZ/junefourteensite), which are kept in sync.
 
 ---
 
+## 2026-10-06 — Quantity stepper capped at available stock
+
+The PDP's quantity stepper had no upper bound at all — a visitor could
+click "+" past however many units were actually in stock, independent of
+the low-stock message/badge (previous two entries) that warns about it
+without ever constraining the picker itself.
+
+Fix: a new `atMaxQuantity` flag (`quantity >= product.stockQuantity`, same
+"`undefined` only for the historical mock catalog" carve-out the other
+stock-aware code already uses). The "+" button disables once reached and
+a small "Only N available" note appears under the stepper; the increment
+handler also clamps directly (`Math.min(stockQuantity, q + 1)`) rather
+than relying on the disabled attribute alone. No change to validation or
+the add/checkout actions — checkout already re-validates everything
+server-side regardless, and there's no free-text quantity input to work
+around the stepper with.
+
+**Verified**: `tsc`/`lint`/clean `next build`; headless Chromium against
+three real products at different stock levels — stock 8 stops at 8
+(button disables, hint shown), stock 4 stops at 4, and a stock-20 control
+reaches 11 after 10 clicks with the button still enabled, confirming
+normal-stock products aren't capped prematurely.
+
+Docs: `ARCHITECTURE.md` new §29; `walkthrough.md`'s Products/Inventory
+sections corrected — they previously (and now incorrectly) said only the
+Sold Out toggle blocks a purchase, which stopped being true once stock
+reaching 0 became its own independent gate.
+
+---
+
 ## 2026-10-06 — Low-stock/out-of-stock badge on the product grid card
 
 Reported as "the low-stock count doesn't show on the products page."
